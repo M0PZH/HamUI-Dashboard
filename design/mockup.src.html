@@ -1,0 +1,567 @@
+<title>HamUI Dashboard</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>/*HAMUI_CSS*/</style>
+<style>
+/* Layout: a 4-column widget grid (2 on narrow screens) with fixed row height;
+   widgets come in S 1×1, M 2×1, L 2×2, XL 4×2. Edit mode adds remove / resize
+   chrome and drag-to-reorder. All colors come from HamUI tokens. */
+:root { --dash-row: 150px; --dash-gap: 12px; --dash-cols: 4; }
+@media (max-width: 900px) { :root { --dash-cols: 2; } }
+@media (max-width: 520px) { :root { --dash-row: 132px; --dash-gap: 10px; } }
+
+.dash { padding-block: var(--ham-space-5) var(--ham-space-7); display: flex; flex-direction: column; gap: var(--ham-space-4); }
+.dash-top { display: flex; align-items: center; flex-wrap: wrap; gap: var(--ham-space-3); }
+.dash-title { display: flex; flex-direction: column; gap: 2px; }
+.dash-title h1 { font-size: 20px; }
+.dash-title span { color: var(--ham-fg-faint); font-size: var(--ham-text-sm); }
+.dash-hint { display: flex; align-items: center; gap: var(--ham-space-2); color: var(--ham-fg-muted); font-size: var(--ham-text-sm); padding: 8px 12px; border: 1px solid var(--ham-border); border-radius: var(--ham-radius-md); background: var(--ham-surface); }
+.dash-hint kbd { font-size: 10px; }
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(var(--dash-cols), minmax(0, 1fr));
+  grid-auto-rows: var(--dash-row);
+  grid-auto-flow: row dense;
+  gap: var(--dash-gap);
+}
+.w, .w-slot { grid-column: span 1; grid-row: span 1; min-width: 0; }
+[data-size="M"] { grid-column: span 2; }
+[data-size="L"] { grid-column: span 2; grid-row: span 2; }
+[data-size="XL"] { grid-column: span var(--dash-cols); grid-row: span 2; }
+
+.w {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--ham-surface);
+  border: 1px solid var(--ham-border);
+  border-radius: var(--ham-radius-lg);
+  overflow: hidden;
+  touch-action: pan-y;
+}
+.w-head { display: flex; align-items: center; gap: var(--ham-space-2); min-height: 32px; padding: 6px 12px 0; }
+.w-head .ham-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.w-head .w-extra { color: var(--ham-fg-faint); font: 11px var(--ham-font-mono); white-space: nowrap; }
+.w-grip { display: none; width: 14px; height: 14px; color: var(--ham-fg-faint); flex: none; }
+.w-body { flex: 1; min-height: 0; padding: 6px 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+.w-body.is-flush { padding: 6px 0 0; }
+
+/* edit chrome */
+.w-remove, .w-sizes { display: none; }
+.is-editing .w { border-style: dashed; border-color: var(--ham-border-strong); cursor: grab; }
+.is-editing .w-grip { display: block; }
+.is-editing .w-body { pointer-events: none; opacity: 0.72; }
+.is-editing .w-remove {
+  display: grid;
+  place-items: center;
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 3;
+  width: var(--ham-hit-sm);
+  height: var(--ham-hit-sm);
+  border: 1px solid var(--ham-border-strong);
+  border-radius: 50%;
+  background: var(--ham-surface-2);
+  color: var(--ham-fg-muted);
+  font: 500 15px/1 var(--ham-font-ui);
+  cursor: pointer;
+}
+.is-editing .w-remove:hover { color: var(--ham-tx); border-color: var(--ham-tx); }
+.is-editing .w-sizes { display: inline-flex; position: absolute; right: 8px; bottom: 8px; z-index: 3; box-shadow: var(--ham-shadow); background: var(--ham-surface); }
+.is-editing .w-head { padding-right: 40px; }
+.w.is-dragging { position: fixed; z-index: 100; margin: 0; cursor: grabbing; box-shadow: var(--ham-shadow); border-style: solid; border-color: var(--ham-accent-line); pointer-events: none; }
+.w-slot { border: 1px dashed var(--ham-accent-line); background: var(--ham-accent-weak); border-radius: var(--ham-radius-lg); }
+.w.is-new { animation: w-in 220ms ease-out; }
+@keyframes w-in { from { opacity: 0; transform: scale(0.97); } }
+
+/* widget content */
+.w .ham-panadapter { flex: 1; min-height: 0; }
+.w .ham-panadapter > .ham-spectrum { height: auto; flex: 1 1 45%; min-height: 0; }
+.w .ham-panadapter > .ham-waterfall { height: auto; flex: 1 1 55%; min-height: 0; }
+.big-time { font: 400 34px/1 var(--ham-font-mono); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+[data-size="S"] .big-time { font-size: 26px; }
+.sub { color: var(--ham-fg-muted); font: 12px var(--ham-font-mono); }
+.kvs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 12px; }
+.kvs div { display: flex; justify-content: space-between; gap: 6px; font-size: var(--ham-text-sm); color: var(--ham-fg-muted); }
+.kvs b { font: 500 13px var(--ham-font-mono); color: var(--ham-fg); }
+.cond { width: 100%; border-collapse: collapse; font-size: 12px; }
+.cond td, .cond th { padding: 3px 0; text-align: left; border-bottom: 1px solid var(--ham-border); }
+.cond th { color: var(--ham-fg-faint); font-weight: 500; font-size: 11px; }
+.cond tr:last-child td { border-bottom: 0; }
+.good { color: var(--ham-rx); } .fair { color: var(--ham-warn); } .poor { color: var(--ham-tx); }
+.w .ham-table-wrap { flex: 1; min-height: 0; overflow: auto; margin: 0 -12px -12px; }
+.w .ham-table th, .w .ham-table td { padding: 4px 12px; font-size: 12px; }
+.w .ham-table th { position: sticky; top: 0; background: var(--ham-surface); }
+.w .ham-meters { justify-content: center; flex: 1; gap: 8px; }
+.ptt-w { display: flex; flex-direction: column; justify-content: space-between; flex: 1; gap: 8px; }
+.ptt-w .ham-ptt { width: 100%; }
+.knob-row { flex: 1; display: flex; align-items: center; justify-content: space-around; gap: 8px; flex-wrap: wrap; }
+[data-size="S"] .knob-row { justify-content: space-evenly; }
+.ptt-w .ham-trx { align-self: flex-start; }
+.empty { flex: 1; display: grid; place-items: center; text-align: center; color: var(--ham-fg-faint); font-size: var(--ham-text-sm); border: 1px dashed var(--ham-border-strong); border-radius: var(--ham-radius-lg); padding: var(--ham-space-5); grid-column: 1 / -1; grid-row: span 2; }
+
+/* gallery */
+.gallery { width: min(640px, calc(100vw - 32px)); }
+.g-list { display: flex; flex-direction: column; }
+.g-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px var(--ham-space-3); align-items: center; padding: 12px 0; border-bottom: 1px solid var(--ham-border); }
+.g-item:last-child { border-bottom: 0; }
+.g-item h4 { font-size: 14px; font-weight: 500; }
+.g-item p { grid-column: 1; color: var(--ham-fg-muted); font-size: var(--ham-text-sm); }
+.g-item .g-act { grid-row: 1 / span 2; grid-column: 2; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.g-sizes { display: flex; gap: 4px; }
+.g-sizes .ham-badge { font-family: var(--ham-font-mono); }
+@media (prefers-reduced-motion: reduce) { .w.is-new { animation: none; } }
+</style>
+
+<div class="ham-container dash" id="app">
+  <header class="dash-top">
+    <div class="dash-title">
+      <h1>My station</h1>
+      <span>HamUI Dashboard · design mockup · sample data</span>
+    </div>
+    <span class="ham-spacer"></span>
+    <div class="ham-seg ham-seg-sm" id="themeSeg">
+      <button type="button" data-value="dark">Dark</button>
+      <button type="button" data-value="light">Light</button>
+    </div>
+    <button class="ham-btn" id="addBtn" type="button" hidden>Add widget</button>
+    <button class="ham-btn" id="resetBtn" type="button" hidden>Reset layout</button>
+    <button class="ham-btn ham-btn-primary" id="editBtn" type="button">Edit</button>
+  </header>
+
+  <div class="dash-hint" id="hint" hidden>
+    <span>Drag widgets to rearrange, change size in the bottom-right corner, remove with − in the top-right. On touch screens, hold for about 0.3 s before dragging. Press <kbd>Esc</kbd> when done.</span>
+  </div>
+
+  <main class="board" id="board" aria-label="Dashboard"></main>
+</div>
+
+<dialog class="ham-modal gallery" id="gallery">
+  <div class="ham-modal-head">
+    <h3 class="ham-modal-title">Add widget</h3>
+    <button class="ham-btn ham-btn-ghost ham-btn-sm ham-btn-icon" type="button" data-ham-close aria-label="Close">×</button>
+  </div>
+  <div class="ham-modal-body"><div class="g-list" id="gList"></div></div>
+</dialog>
+
+<script>/*HAMUI_JS*/</script>
+<script>
+(() => {
+const H = window.HamUI;
+const $ = (s, r = document) => r.querySelector(s);
+const el = (tag, attrs = {}, html) => { const e = document.createElement(tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (html != null) e.innerHTML = html; return e; };
+
+/* ---------- shared station state ---------- */
+const station = {
+  dial: 14074000, mode: 'USB', tx: false, power: 50, af: 42, rf: 100, sql: 0,
+  subs: new Set(),
+  set(patch) { Object.assign(this, patch); this.subs.forEach((f) => f(patch)); },
+  watch(f) { this.subs.add(f); return () => this.subs.delete(f); },
+};
+const sim = new H.SignalSimulator({ startHz: 14069500, spanHz: 12000, bins: 2048 });
+const frameSubs = new Set();
+let lastFrame = null;
+setInterval(() => { lastFrame = sim.next(); frameSubs.forEach((f) => f(lastFrame)); }, 50);
+const onFrame = (f) => { frameSubs.add(f); return () => frameSubs.delete(f); };
+
+function retune(hz) {
+  if (hz < sim.startHz + 500 || hz > sim.startHz + sim.spanHz - 500) sim.setRange(hz - 4500);
+  station.set({ dial: hz });
+}
+
+/* ---------- widget types ---------- */
+// mount(body, ctx) -> cleanup function. ctx.size is 'S' | 'M' | 'L' | 'XL'; ctx.extra is the head-right text node.
+const TYPES = {
+  panadapter: {
+    title: 'Panadapter', desc: 'Spectrum and waterfall. Click to tune, pinch to zoom.', sizes: ['L', 'XL'], size: 'XL', flush: true,
+    mount(body, ctx) {
+      const host = el('div'); body.append(host);
+      const pan = new H.Panadapter(host, { startHz: sim.startHz, spanHz: sim.spanHz, minDb: -128, maxDb: -62, minSpan: 300 });
+      pan.setDial(station.dial); pan.setPassband(H.passbandFor(station.mode, 2900));
+      const t0 = Date.now();
+      for (let i = 256; i > 0; i--) pan.waterfall.push(sim.next(t0 - i * 50), sim.range);
+      const span = () => { ctx.extra.textContent = H.format.formatSpan(pan.view.span); };
+      span();
+      pan.on('viewchange', span);
+      pan.on('tune', (e) => { e.preventDefault(); retune(e.detail.hz); });
+      const u1 = onFrame((f) => pan.push(f, sim.range));
+      const u2 = station.watch(() => { pan.setDataRange(sim.startHz, sim.spanHz); pan.setDial(station.dial); pan.setPassband(H.passbandFor(station.mode, 2900)); pan.view.reveal(station.dial); });
+      return () => { u1(); u2(); pan.destroy(); };
+    },
+  },
+  vfo: {
+    title: 'VFO', desc: 'Frequency display. Scroll or drag a digit to tune.', sizes: ['M', 'L'], size: 'M',
+    mount(body, ctx) {
+      const big = ctx.size === 'L';
+      const a = el('div'); body.append(a);
+      const fd = new H.FrequencyDisplay(a, { value: station.dial, size: big ? 'xl' : 'lg', unit: big ? 'MHz' : null, label: 'VFO A' });
+      const row = el('div', { class: 'ham-cluster' }); body.append(row);
+      const badge = el('span', { class: 'ham-badge ham-badge-accent' }, station.mode); row.append(badge);
+      const bandB = el('span', { class: 'ham-badge ham-badge-mono' }); row.append(bandB);
+      let bandSel = null;
+      if (big) { const b = el('div'); body.append(b); bandSel = new H.BandSelector(b, { value: H.bandForFrequency(station.dial)?.name }); bandSel.on('change', (e) => retune(e.detail.band.dial)); }
+      const sync = () => { fd.set(station.dial, { silent: true }); badge.textContent = station.mode; const bd = H.bandForFrequency(station.dial); bandB.textContent = bd ? bd.name : '—'; bandSel?.follow(station.dial); fd.setTx(station.tx); };
+      sync();
+      fd.on('change', (e) => retune(e.detail.hz));
+      const u = station.watch(sync);
+      ctx.extra.textContent = 'A';
+      return () => { u(); fd.destroy(); bandSel?.destroy(); };
+    },
+  },
+  meters: {
+    title: 'Meters', desc: 'S-meter and transmit meters (power, SWR, ALC).', sizes: ['M', 'L'], size: 'M',
+    mount(body, ctx) {
+      const wrap = el('div', { class: 'ham-meters' }); body.append(wrap);
+      const types = ctx.size === 'L' ? ['s', 'power', 'swr', 'alc'] : ['s', 'power'];
+      const m = Object.fromEntries(types.map((t) => { const d = el('div'); wrap.append(d); return [t, new H.Meter(d, { type: t, off: t !== 's' })]; }));
+      let level = -120, ramp = 0;
+      const u1 = onFrame(() => {
+        if (station.tx) {
+          ramp = Math.min(1, ramp + 0.2);
+          const wob = 0.88 + 0.12 * Math.random();
+          m.power?.setOff(false); m.power?.set(station.power * ramp * wob); m.swr?.setOff(false); m.swr?.set(1.3); m.alc?.setOff(false); m.alc?.set(30 * ramp * wob);
+          m.s.setOff(true, m.s.valueEl.textContent);
+          return;
+        }
+        if (ramp) { ramp = 0; m.power?.setOff(true); m.swr?.setOff(true); m.alc?.setOff(true); m.s.setOff(false); }
+        const [lo, hi] = H.passbandFor(station.mode, 2900);
+        const dbm = sim.power(station.dial + lo, station.dial + hi);
+        level += (dbm - level) * (dbm > level ? 0.6 : 0.1);
+        m.s.set(level);
+      });
+      return () => { u1(); Object.values(m).forEach((x) => x.destroy()); };
+    },
+  },
+  clock: {
+    title: 'UTC', desc: 'UTC time and date; size M adds local time.', sizes: ['S', 'M'], size: 'S',
+    mount(body, ctx) {
+      const t = el('time', { class: 'big-time' }); body.append(t);
+      const d = el('div', { class: 'sub' }); body.append(d);
+      const loc = ctx.size === 'M' ? el('div', { class: 'sub' }) : null; if (loc) body.append(loc);
+      const c = new H.Clock(t, { seconds: true });
+      const tick = () => { const n = new Date(); d.textContent = n.toISOString().slice(0, 10); if (loc) loc.textContent = `Local ${n.toTimeString().slice(0, 8)}`; };
+      tick(); const id = setInterval(tick, 1000);
+      return () => { clearInterval(id); c.destroy(); };
+    },
+  },
+  solar: {
+    title: 'Propagation', desc: 'Solar flux, K index and band conditions.', sizes: ['S', 'M', 'L'], size: 'S',
+    mount(body, ctx) {
+      ctx.extra.textContent = 'sample';
+      body.insertAdjacentHTML('beforeend', `<div class="kvs"><div>SFI <b>142</b></div><div>SSN <b>98</b></div><div>A <b>8</b></div><div>K <b>2</b></div></div>`);
+      if (ctx.size !== 'S') body.insertAdjacentHTML('beforeend', `<table class="cond"><tr><th>Band</th><th>Day</th><th>Night</th></tr>
+        <tr><td class="ham-mono">80–40m</td><td class="fair">Fair</td><td class="good">Good</td></tr>
+        <tr><td class="ham-mono">30–20m</td><td class="good">Good</td><td class="good">Good</td></tr>
+        ${ctx.size === 'L' ? '<tr><td class="ham-mono">17–15m</td><td class="good">Good</td><td class="fair">Fair</td></tr>' : ''}
+        <tr><td class="ham-mono">12–10m</td><td class="fair">Fair</td><td class="poor">Poor</td></tr></table>`);
+      return () => {};
+    },
+  },
+  ft8: {
+    title: 'FT8 decodes', desc: 'FT8 decodes in the passband, CQ calls highlighted.', sizes: ['M', 'L'], size: 'L',
+    mount(body, ctx) {
+      const MSG = ['CQ JA1XYZ PM95', 'K1ABC DL2XYZ JO62', 'VK3DEF ZL1GHI RR73', 'CQ DX BG4AAA OM92', 'N0CALL HL2KKK PM37 -12', 'CQ EA4ZZZ IN80', 'W5QRP R2ABC KO85 R-09', 'CQ POTA K4XYZ EM73', 'JH1ABC VE3XYZ 73', 'CQ BV2AA PL05'];
+      const wrap = el('div', { class: 'ham-table-wrap' }); body.append(wrap);
+      wrap.innerHTML = '<table class="ham-table ham-table-hover"><thead><tr><th>UTC</th><th class="ham-num">dB</th><th class="ham-num">Hz</th><th>Message</th></tr></thead><tbody class="ham-mono"></tbody></table>';
+      const tb = $('tbody', wrap);
+      let n = 0;
+      const add = (k) => {
+        const now = new Date(Date.now() - k * 15000), utc = now.toISOString().slice(11, 19).replace(/:/g, '').slice(0, 4) + String(Math.floor(now.getUTCSeconds() / 15) * 15).padStart(2, '0');
+        for (let i = 0; i < 3; i++) {
+          const msg = MSG[(n++ * 7) % MSG.length];
+          const tr = el('tr', msg.startsWith('CQ') ? { class: 'is-highlight' } : {}, `<td>${utc}</td><td class="ham-num">${String(-24 + ((n * 13) % 28)).padStart(3, ' ')}</td><td class="ham-num">${300 + ((n * 389) % 2600)}</td><td>${msg}</td>`);
+          tb.prepend(tr);
+        }
+        while (tb.children.length > 40) tb.lastChild.remove();
+        ctx.extra.textContent = `${tb.children.length} decodes`;
+      };
+      for (let k = 4; k >= 0; k--) add(k);
+      const id = setInterval(() => add(0), 15000);
+      return () => clearInterval(id);
+    },
+  },
+  dx: {
+    title: 'DX Cluster', desc: 'Latest DX spots. Click one to tune to it.', sizes: ['M', 'L'], size: 'M',
+    mount(body, ctx) {
+      const SP = [['3D2AG', 14074000, 'JA1XYZ', 'FT8'], ['VP8LP', 14025000, 'DL1ABC', 'CW'], ['ZL7DX', 7074000, 'VK2XX', 'FT8'], ['FT8WW', 21074000, 'BG4AAA', 'FT8'], ['A35JT', 14195000, 'K1ABC', 'SSB'], ['T32AZ', 18100000, 'W6XYZ', 'FT8'], ['E51D', 10136000, 'JH1ABC', 'FT8']];
+      const rows = ctx.size === 'L' ? SP : SP.slice(0, 3);
+      const wrap = el('div', { class: 'ham-table-wrap' }); body.append(wrap);
+      wrap.innerHTML = `<table class="ham-table ham-table-hover"><thead><tr><th>DX</th><th class="ham-num">kHz</th><th>Mode</th>${ctx.size === 'L' ? '<th>Spotter</th>' : ''}</tr></thead><tbody class="ham-mono">${rows.map(([c, f, s, m]) => `<tr data-hz="${f}" style="cursor:pointer"><td>${c}</td><td class="ham-num">${(f / 1000).toFixed(1)}</td><td>${m}</td>${ctx.size === 'L' ? `<td>${s}</td>` : ''}</tr>`).join('')}</tbody></table>`;
+      wrap.addEventListener('click', (e) => { const tr = e.target.closest('tr[data-hz]'); if (tr) retune(+tr.dataset.hz); });
+      ctx.extra.textContent = 'sample';
+      return () => {};
+    },
+  },
+  ptt: {
+    title: 'Transmit', desc: 'TX/RX status and a hold-to-talk PTT.', sizes: ['S', 'M'], size: 'S',
+    mount(body) {
+      const box = el('div', { class: 'ptt-w' }); body.append(box);
+      const t = el('span'); box.append(t); const trx = new H.TxIndicator(t);
+      const b = el('button'); box.append(b); const ptt = new H.Ptt(b);
+      ptt.on('ptt', (e) => station.set({ tx: e.detail.on }));
+      const u = station.watch(() => trx.set(station.tx ? 'tx' : 'rx'));
+      return () => { u(); ptt.destroy(); trx.destroy(); if (station.tx) station.set({ tx: false }); };
+    },
+  },
+  knobs: {
+    title: 'Knobs', desc: 'AF / RF gain, squelch and TX power. Drag, scroll or use the arrow keys.', sizes: ['S', 'M', 'L'], size: 'M',
+    mount(body, ctx) {
+      const all = [
+        ['af', 'AF', { min: 0, max: 100 }],
+        ['rf', 'RF', { min: 0, max: 100 }],
+        ['sql', 'SQL', { min: 0, max: 100 }],
+        ['power', 'PWR', { min: 5, max: 100, unit: 'W' }],
+      ];
+      const list = ctx.size === 'S' ? all.filter(([k]) => k === 'af' || k === 'power') : all;
+      const row = el('div', { class: 'knob-row' }); body.append(row);
+      const knobs = list.map(([key, label, o]) => {
+        const d = el('div'); row.append(d);
+        const k = new H.Knob(d, { ...o, label, value: station[key], size: ctx.size === 'L' ? 'lg' : ctx.size === 'S' ? 'sm' : 'md' });
+        k.on('change', (e) => station.set({ [key]: e.detail.value }));
+        return [key, k];
+      });
+      const u = station.watch((patch) => { for (const [key, k] of knobs) if (key in patch) k.set(station[key], { silent: true }); });
+      return () => { u(); knobs.forEach(([, k]) => k.destroy()); };
+    },
+  },
+  mode: {
+    title: 'Band & mode', desc: 'Band and operating mode selection.', sizes: ['M', 'L'], size: 'M',
+    mount(body) {
+      const b = el('div'); const m = el('div'); body.append(b, m);
+      const band = new H.BandSelector(b, { value: H.bandForFrequency(station.dial)?.name, bands: ['80m', '40m', '30m', '20m', '17m', '15m', '10m'] });
+      const mode = new H.ModeSelector(m, { value: station.mode, modes: ['LSB', 'USB', 'CW', 'FM', 'DATA'] });
+      band.on('change', (e) => { if (e.detail.band) retune(e.detail.band.dial); });
+      mode.on('change', (e) => station.set({ mode: e.detail.value }));
+      const u = station.watch(() => { band.follow(station.dial); mode.select(station.mode, { silent: true }); });
+      return () => { u(); band.destroy(); mode.destroy(); };
+    },
+  },
+};
+
+const DEFAULT = [['panadapter', 'XL'], ['vfo', 'M'], ['meters', 'M'], ['ft8', 'L'], ['clock', 'S'], ['solar', 'S'], ['dx', 'M'], ['ptt', 'S'], ['knobs', 'M'], ['mode', 'M']];
+
+/* ---------- board ---------- */
+const board = $('#board');
+const app = $('#app');
+const live = new Map(); // id -> {node, cleanup}
+const KEY = 'hamui-dashboard-layout-v2';
+
+function loadLayout() {
+  try { const l = JSON.parse(localStorage.getItem(KEY)); if (Array.isArray(l) && l.every(([t, s]) => TYPES[t] && TYPES[t].sizes.includes(s))) return l; } catch { /* storage unavailable */ }
+  return DEFAULT;
+}
+function saveLayout() {
+  const l = [...board.querySelectorAll('.w')].map((n) => [n.dataset.type, n.dataset.size]);
+  try { localStorage.setItem(KEY, JSON.stringify(l)); } catch { /* ignore */ }
+}
+
+const GRIP = '<svg class="w-grip" viewBox="0 0 14 14" fill="currentColor" aria-hidden="true"><circle cx="4" cy="3" r="1.2"/><circle cx="10" cy="3" r="1.2"/><circle cx="4" cy="7" r="1.2"/><circle cx="10" cy="7" r="1.2"/><circle cx="4" cy="11" r="1.2"/><circle cx="10" cy="11" r="1.2"/></svg>';
+
+function mountContent(node) {
+  const t = TYPES[node.dataset.type];
+  live.get(node)?.();
+  const body = $('.w-body', node);
+  body.replaceChildren();
+  body.classList.toggle('is-flush', !!t.flush);
+  const extra = $('.w-extra', node); extra.textContent = '';
+  live.set(node, t.mount(body, { size: node.dataset.size, extra }));
+}
+
+function createWidget(type, size) {
+  const t = TYPES[type];
+  const node = el('article', { class: 'w', 'data-type': type, 'data-size': size, tabindex: '-1', 'aria-label': t.title });
+  node.innerHTML = `<header class="w-head">${GRIP}<span class="ham-label">${t.title}</span><span class="w-extra"></span></header><div class="w-body"></div>
+    <button class="w-remove" type="button" aria-label="Remove ${t.title}">−</button>
+    <div class="w-sizes ham-seg ham-seg-sm ham-seg-mono" role="radiogroup" aria-label="Size">${t.sizes.map((s) => `<button type="button" data-v="${s}" aria-pressed="${s === size}">${s}</button>`).join('')}</div>`;
+  return node;
+}
+
+function render(layout) {
+  for (const [, c] of live) c();
+  live.clear();
+  board.replaceChildren(...layout.map(([t, s]) => createWidget(t, s)));
+  board.querySelectorAll('.w').forEach(mountContent);
+  updateEmpty();
+}
+
+function updateEmpty() {
+  const has = board.querySelector('.w');
+  let e = $('.empty', board);
+  if (!has && !e) { e = el('div', { class: 'empty' }, 'No widgets yet. Use “Add widget” to start.'); board.append(e); }
+  if (has && e) e.remove();
+}
+
+/* FLIP: animate siblings from old to new positions after a DOM change */
+function flip(change) {
+  const nodes = [...board.children];
+  const before = new Map(nodes.map((n) => [n, n.getBoundingClientRect()]));
+  change();
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  for (const n of board.children) {
+    const a = before.get(n); if (!a || n.classList.contains('is-dragging')) continue;
+    const b = n.getBoundingClientRect();
+    const dx = a.left - b.left, dy = a.top - b.top;
+    if (!dx && !dy) continue;
+    n.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }], { duration: 180, easing: 'cubic-bezier(.2,.7,.3,1)' });
+  }
+}
+
+/* ---------- edit mode ---------- */
+let editing = false;
+function setEditing(on) {
+  editing = on;
+  app.classList.toggle('is-editing', on);
+  board.classList.toggle('is-editing', on);
+  $('#editBtn').textContent = on ? 'Done' : 'Edit';
+  $('#addBtn').hidden = !on;
+  $('#resetBtn').hidden = !on;
+  $('#hint').hidden = !on;
+  board.querySelectorAll('.w').forEach((n) => { n.tabIndex = on ? 0 : -1; });
+  if (!on) saveLayout();
+}
+$('#editBtn').onclick = () => setEditing(!editing);
+$('#resetBtn').onclick = () => { flip(() => render(DEFAULT)); saveLayout(); setEditing(true); };
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && editing && !$('#gallery').open) setEditing(false); });
+
+board.addEventListener('click', (e) => {
+  if (!editing) return;
+  const node = e.target.closest('.w'); if (!node) return;
+  if (e.target.closest('.w-remove')) {
+    live.get(node)?.(); live.delete(node);
+    flip(() => node.remove());
+    updateEmpty(); saveLayout();
+    return;
+  }
+  const sb = e.target.closest('.w-sizes button');
+  if (sb && sb.dataset.v !== node.dataset.size) {
+    node.querySelectorAll('.w-sizes button').forEach((b) => b.setAttribute('aria-pressed', b === sb));
+    flip(() => { node.dataset.size = sb.dataset.v; });
+    mountContent(node); saveLayout();
+  }
+});
+
+/* keyboard reorder: ←/→ move the focused widget */
+board.addEventListener('keydown', (e) => {
+  if (!editing) return;
+  const node = e.target.closest('.w'); if (!node || e.target !== node) return;
+  if (e.key === 'ArrowLeft' && node.previousElementSibling) { flip(() => board.insertBefore(node, node.previousElementSibling)); node.focus(); e.preventDefault(); saveLayout(); }
+  if (e.key === 'ArrowRight' && node.nextElementSibling) { flip(() => board.insertBefore(node.nextElementSibling, node)); node.focus(); e.preventDefault(); saveLayout(); }
+  if (e.key === 'Delete' || e.key === 'Backspace') { $('.w-remove', node).click(); e.preventDefault(); }
+});
+
+/* ---------- drag ---------- */
+let drag = null;   // {node, slot, dx, dy, id}
+let press = null;  // pending press before a drag starts
+
+board.addEventListener('pointerdown', (e) => {
+  const node = e.target.closest('.w');
+  if (!node || e.target.closest('.w-remove, .w-sizes') || (e.pointerType === 'mouse' && e.button !== 0)) return;
+  // touch: hold to enter edit mode / to pick up a widget
+  const holdMs = e.pointerType === 'mouse' ? 0 : editing ? 280 : 500;
+  press = { node, id: e.pointerId, x: e.clientX, y: e.clientY, type: e.pointerType, armed: holdMs === 0, timer: 0 };
+  if (!editing && e.pointerType === 'mouse') { press = null; return; }
+  if (holdMs) press.timer = setTimeout(() => {
+    if (!press) return;
+    if (!editing) setEditing(true);
+    press.armed = true;
+    navigator.vibrate?.(10);
+  }, holdMs);
+});
+
+window.addEventListener('pointermove', (e) => {
+  if (drag && e.pointerId === drag.id) { e.preventDefault(); moveDrag(e); return; }
+  if (!press || e.pointerId !== press.id) return;
+  const dist = Math.hypot(e.clientX - press.x, e.clientY - press.y);
+  if (!press.armed) { if (dist > 8) { clearTimeout(press.timer); press = null; } return; } // moved before hold: it's a scroll
+  if (editing && dist > 4) startDrag(press.node, e);
+});
+
+// stop touch scrolling while dragging
+document.addEventListener('touchmove', (e) => { if (drag || press?.armed) e.preventDefault(); }, { passive: false });
+
+const endPress = (e) => {
+  if (press && e.pointerId === press.id) { clearTimeout(press.timer); press = null; }
+  if (drag && e.pointerId === drag.id) endDrag();
+};
+window.addEventListener('pointerup', endPress);
+window.addEventListener('pointercancel', endPress);
+
+function startDrag(node, e) {
+  const r = node.getBoundingClientRect();
+  const slot = el('div', { class: 'w-slot', 'data-size': node.dataset.size });
+  node.after(slot);
+  drag = { node, slot, id: e.pointerId, dx: e.clientX - r.left, dy: e.clientY - r.top };
+  press = null;
+  Object.assign(node.style, { width: `${r.width}px`, height: `${r.height}px`, left: `${r.left}px`, top: `${r.top}px` });
+  node.classList.add('is-dragging');
+  document.body.style.userSelect = 'none';
+}
+
+let lastTarget = null;
+function moveDrag(e) {
+  const { node, slot } = drag;
+  node.style.left = `${e.clientX - drag.dx}px`;
+  node.style.top = `${e.clientY - drag.dy}px`;
+  // find the widget under the pointer
+  const over = document.elementsFromPoint(e.clientX, e.clientY).find((n) => n.classList?.contains('w') && n !== node);
+  if (!over || over === lastTarget) { if (!over) lastTarget = null; return; }
+  lastTarget = over;
+  const r = over.getBoundingClientRect();
+  const after = (e.clientX - r.left) / r.width > 0.5 || (e.clientY - r.top) / r.height > 0.66;
+  const ref = after ? over.nextSibling : over;
+  if (ref === slot || (after && over.nextSibling === slot) || (!after && over.previousSibling === slot)) return;
+  flip(() => board.insertBefore(slot, ref));
+}
+
+function endDrag() {
+  const { node, slot } = drag;
+  const to = slot.getBoundingClientRect();
+  const from = node.getBoundingClientRect();
+  slot.replaceWith(node);
+  node.classList.remove('is-dragging');
+  node.removeAttribute('style');
+  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    node.animate([{ transform: `translate(${from.left - to.left}px, ${from.top - to.top}px)` }, { transform: 'none' }], { duration: 160, easing: 'ease-out' });
+  }
+  document.body.style.userSelect = '';
+  drag = null; lastTarget = null;
+  saveLayout();
+}
+
+/* ---------- gallery ---------- */
+const gallery = new H.Modal($('#gallery'));
+function renderGallery() {
+  const present = new Set([...board.querySelectorAll('.w')].map((n) => n.dataset.type));
+  $('#gList').innerHTML = Object.entries(TYPES).map(([k, t]) => `
+    <div class="g-item">
+      <h4>${t.title}</h4>
+      <p>${t.desc}</p>
+      <div class="g-act">
+        <div class="g-sizes">${t.sizes.map((s) => `<span class="ham-badge">${s}</span>`).join('')}</div>
+        <button class="ham-btn ham-btn-sm ${present.has(k) ? '' : 'ham-btn-primary'}" type="button" data-add="${k}" ${present.has(k) ? 'disabled' : ''}>${present.has(k) ? 'Added' : 'Add'}</button>
+      </div>
+    </div>`).join('');
+}
+$('#addBtn').onclick = () => { renderGallery(); gallery.open(); };
+$('#gList').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-add]'); if (!b) return;
+  const t = TYPES[b.dataset.add];
+  const node = createWidget(b.dataset.add, t.size);
+  node.classList.add('is-new'); node.tabIndex = 0;
+  flip(() => { $('.empty', board)?.remove(); board.append(node); });
+  mountContent(node); saveLayout();
+  gallery.close();
+  requestAnimationFrame(() => node.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
+});
+
+/* ---------- theme ---------- */
+const themeSeg = new H.Segmented($('#themeSeg'), { value: H.theme.resolved() });
+themeSeg.on('change', (e) => H.theme.set(e.detail.value));
+H.theme.onChange(() => themeSeg.select(H.theme.resolved(), { silent: true }));
+
+render(loadLayout());
+})();
+</script>
