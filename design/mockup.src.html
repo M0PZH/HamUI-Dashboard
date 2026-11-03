@@ -4,10 +4,11 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
 <style>/*HAMUI_CSS*/</style>
 <style>
-/* Layout: a 4-column widget grid (2 on narrow screens) with fixed row height;
-   widgets come in S 1×1, M 2×1, L 2×2, XL 4×2. Edit mode adds remove / resize
-   chrome and drag-to-reorder. All colors come from HamUI tokens. */
-:root { --dash-row: 150px; --dash-gap: 12px; --dash-cols: 4; }
+/* Layout: a 4-column widget grid (2 on narrow screens). The row unit is half a
+   cell, so XS is a half-height tile: XS 1×½, S 1×1, M 2×1, L 2×2, XL 4×2.
+   Edit mode adds remove / resize chrome and drag-to-reorder. All colors come
+   from HamUI tokens. */
+:root { --dash-row: 150px; --dash-gap: 12px; --dash-cols: 4; --dash-unit: calc((var(--dash-row) - var(--dash-gap)) / 2); }
 @media (max-width: 900px) { :root { --dash-cols: 2; } }
 @media (max-width: 520px) { :root { --dash-row: 132px; --dash-gap: 10px; } }
 
@@ -22,14 +23,15 @@
 .board {
   display: grid;
   grid-template-columns: repeat(var(--dash-cols), minmax(0, 1fr));
-  grid-auto-rows: var(--dash-row);
+  grid-auto-rows: var(--dash-unit);
   grid-auto-flow: row dense;
   gap: var(--dash-gap);
 }
-.w, .w-slot { grid-column: span 1; grid-row: span 1; min-width: 0; }
+.w, .w-slot { grid-column: span 1; grid-row: span 2; min-width: 0; }
+[data-size="XS"] { grid-row: span 1; }
 [data-size="M"] { grid-column: span 2; }
-[data-size="L"] { grid-column: span 2; grid-row: span 2; }
-[data-size="XL"] { grid-column: span var(--dash-cols); grid-row: span 2; }
+[data-size="L"] { grid-column: span 2; grid-row: span 4; }
+[data-size="XL"] { grid-column: span var(--dash-cols); grid-row: span 4; }
 
 .w {
   position: relative;
@@ -47,6 +49,18 @@
 .w-grip { display: none; width: 14px; height: 14px; color: var(--ham-fg-faint); flex: none; }
 .w-body { flex: 1; min-height: 0; padding: 6px 12px 12px; display: flex; flex-direction: column; gap: 8px; }
 .w-body.is-flush { padding: 6px 0 0; }
+/* XS: one line under the title */
+[data-size="XS"] .w-head { min-height: 26px; padding-top: 4px; }
+[data-size="XS"] .w-body { padding: 0 12px 8px; flex-direction: row; align-items: center; gap: 10px; }
+.xs-val { font: 400 20px/1 var(--ham-font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.xs-sub { color: var(--ham-fg-muted); font: 12px var(--ham-font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.xs-val.is-tx { color: var(--ham-tx); }
+.xs-bar { flex: 1; min-width: 24px; height: 4px; border-radius: 2px; background: var(--ham-border); overflow: hidden; }
+.xs-bar > i { display: block; height: 100%; width: 0; background: var(--ham-accent); transition: width 80ms linear; }
+.xs-bar.is-tx > i { background: var(--ham-tx); }
+.xs-row { flex: 1; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.xs-row .ham-ptt { flex: 1; min-height: 0; height: 28px; }
+.is-editing [data-size="XS"] .w-sizes { bottom: 5px; right: 6px; }
 
 /* edit chrome */
 .w-remove, .w-sizes { display: none; }
@@ -101,7 +115,7 @@
 .knob-row { flex: 1; display: flex; align-items: center; justify-content: space-around; gap: 8px; flex-wrap: wrap; }
 [data-size="S"] .knob-row { justify-content: space-evenly; }
 .ptt-w .ham-trx { align-self: flex-start; }
-.empty { flex: 1; display: grid; place-items: center; text-align: center; color: var(--ham-fg-faint); font-size: var(--ham-text-sm); border: 1px dashed var(--ham-border-strong); border-radius: var(--ham-radius-lg); padding: var(--ham-space-5); grid-column: 1 / -1; grid-row: span 2; }
+.empty { flex: 1; display: grid; place-items: center; text-align: center; color: var(--ham-fg-faint); font-size: var(--ham-text-sm); border: 1px dashed var(--ham-border-strong); border-radius: var(--ham-radius-lg); padding: var(--ham-space-5); grid-column: 1 / -1; grid-row: span 4; }
 
 /* gallery */
 .gallery { width: min(640px, calc(100vw - 32px)); }
@@ -173,7 +187,7 @@ function retune(hz) {
 }
 
 /* ---------- widget types ---------- */
-// mount(body, ctx) -> cleanup function. ctx.size is 'S' | 'M' | 'L' | 'XL'; ctx.extra is the head-right text node.
+// mount(body, ctx) -> cleanup function. ctx.size is 'XS' | 'S' | 'M' | 'L' | 'XL'; ctx.extra is the head-right text node.
 const TYPES = {
   panadapter: {
     title: 'Panadapter', desc: 'Spectrum and waterfall. Click to tune, pinch to zoom.', sizes: ['L', 'XL'], size: 'XL', flush: true,
@@ -193,8 +207,16 @@ const TYPES = {
     },
   },
   vfo: {
-    title: 'VFO', desc: 'Frequency display. Scroll or drag a digit to tune.', sizes: ['M', 'L'], size: 'M',
+    title: 'VFO', desc: 'Frequency display. Scroll or drag a digit to tune.', sizes: ['XS', 'M', 'L'], size: 'M',
     mount(body, ctx) {
+      if (ctx.size === 'XS') {
+        const a = el('div'); body.append(a);
+        const fd = new H.FrequencyDisplay(a, { value: station.dial, label: 'VFO A' });
+        fd.on('change', (e) => retune(e.detail.hz));
+        const sync = () => { fd.set(station.dial, { silent: true }); fd.setTx(station.tx); ctx.extra.textContent = station.mode; };
+        sync(); const u = station.watch(sync);
+        return () => { u(); fd.destroy(); };
+      }
       const big = ctx.size === 'L';
       const a = el('div'); body.append(a);
       const fd = new H.FrequencyDisplay(a, { value: station.dial, size: big ? 'xl' : 'lg', unit: big ? 'MHz' : null, label: 'VFO A' });
@@ -212,8 +234,25 @@ const TYPES = {
     },
   },
   meters: {
-    title: 'Meters', desc: 'S-meter and transmit meters (power, SWR, ALC).', sizes: ['M', 'L'], size: 'M',
+    title: 'Meters', desc: 'S-meter and transmit meters (power, SWR, ALC).', sizes: ['XS', 'M', 'L'], size: 'M',
     mount(body, ctx) {
+      if (ctx.size === 'XS') {
+        const v = el('span', { class: 'xs-val' }); const bar = el('div', { class: 'xs-bar' }, '<i></i>'); body.append(v, bar);
+        let level = -120;
+        const u = onFrame(() => {
+          const tx = station.tx;
+          v.classList.toggle('is-tx', tx); bar.classList.toggle('is-tx', tx);
+          if (tx) { const w = station.power * (0.88 + 0.12 * Math.random()); v.textContent = `${w.toFixed(0)} W`; bar.firstChild.style.width = `${Math.min(100, w)}%`; ctx.extra.textContent = 'PWR'; return; }
+          const [lo, hi] = H.passbandFor(station.mode, 2900);
+          const dbm = sim.power(station.dial + lo, station.dial + hi);
+          level += (dbm - level) * (dbm > level ? 0.6 : 0.1);
+          const s = H.format.dbmToS(level);
+          v.textContent = s.label ?? s;
+          bar.firstChild.style.width = `${Math.max(0, Math.min(100, ((level + 127) / 100) * 100))}%`;
+          ctx.extra.textContent = `${level.toFixed(0)} dBm`;
+        });
+        return u;
+      }
       const wrap = el('div', { class: 'ham-meters' }); body.append(wrap);
       const types = ctx.size === 'L' ? ['s', 'power', 'swr', 'alc'] : ['s', 'power'];
       const m = Object.fromEntries(types.map((t) => { const d = el('div'); wrap.append(d); return [t, new H.Meter(d, { type: t, off: t !== 's' })]; }));
@@ -236,8 +275,15 @@ const TYPES = {
     },
   },
   clock: {
-    title: 'UTC', desc: 'UTC time and date; size M adds local time.', sizes: ['S', 'M'], size: 'S',
+    title: 'UTC', desc: 'UTC time and date; size M adds local time.', sizes: ['XS', 'S', 'M'], size: 'S',
     mount(body, ctx) {
+      if (ctx.size === 'XS') {
+        const t = el('time', { class: 'xs-val' }); body.append(t);
+        const c = new H.Clock(t, { seconds: true });
+        const tick = () => { ctx.extra.textContent = new Date().toISOString().slice(5, 10); };
+        tick(); const id = setInterval(tick, 60000);
+        return () => { clearInterval(id); c.destroy(); };
+      }
       const t = el('time', { class: 'big-time' }); body.append(t);
       const d = el('div', { class: 'sub' }); body.append(d);
       const loc = ctx.size === 'M' ? el('div', { class: 'sub' }) : null; if (loc) body.append(loc);
@@ -248,9 +294,10 @@ const TYPES = {
     },
   },
   solar: {
-    title: 'Propagation', desc: 'Solar flux, K index and band conditions.', sizes: ['S', 'M', 'L'], size: 'S',
+    title: 'Propagation', desc: 'Solar flux, K index and band conditions.', sizes: ['XS', 'S', 'M', 'L'], size: 'S',
     mount(body, ctx) {
       ctx.extra.textContent = 'sample';
+      if (ctx.size === 'XS') { body.insertAdjacentHTML('beforeend', '<span class="xs-val">142</span><span class="xs-sub">SFI · K 2</span>'); return () => {}; }
       body.insertAdjacentHTML('beforeend', `<div class="kvs"><div>SFI <b>142</b></div><div>SSN <b>98</b></div><div>A <b>8</b></div><div>K <b>2</b></div></div>`);
       if (ctx.size !== 'S') body.insertAdjacentHTML('beforeend', `<table class="cond"><tr><th>Band</th><th>Day</th><th>Night</th></tr>
         <tr><td class="ham-mono">80–40m</td><td class="fair">Fair</td><td class="good">Good</td></tr>
@@ -284,8 +331,14 @@ const TYPES = {
     },
   },
   dx: {
-    title: 'DX Cluster', desc: 'Latest DX spots. Click one to tune to it.', sizes: ['M', 'L'], size: 'M',
+    title: 'DX Cluster', desc: 'Latest DX spots. Click one to tune to it.', sizes: ['XS', 'M', 'L'], size: 'M',
     mount(body, ctx) {
+      if (ctx.size === 'XS') {
+        const b = el('button', { class: 'xs-row ham-btn ham-btn-ghost', type: 'button', style: 'justify-content:flex-start;padding:0;min-height:0;height:auto', title: 'Tune to this spot' }, '<span class="xs-val" style="font-size:16px;color:var(--ham-fg)">3D2AG</span><span class="xs-sub">14074.0 FT8</span>');
+        b.onclick = () => retune(14074000); body.append(b);
+        ctx.extra.textContent = 'latest';
+        return () => {};
+      }
       const SP = [['3D2AG', 14074000, 'JA1XYZ', 'FT8'], ['VP8LP', 14025000, 'DL1ABC', 'CW'], ['ZL7DX', 7074000, 'VK2XX', 'FT8'], ['FT8WW', 21074000, 'BG4AAA', 'FT8'], ['A35JT', 14195000, 'K1ABC', 'SSB'], ['T32AZ', 18100000, 'W6XYZ', 'FT8'], ['E51D', 10136000, 'JH1ABC', 'FT8']];
       const rows = ctx.size === 'L' ? SP : SP.slice(0, 3);
       const wrap = el('div', { class: 'ham-table-wrap' }); body.append(wrap);
@@ -296,9 +349,9 @@ const TYPES = {
     },
   },
   ptt: {
-    title: 'Transmit', desc: 'TX/RX status and a hold-to-talk PTT.', sizes: ['S', 'M'], size: 'S',
-    mount(body) {
-      const box = el('div', { class: 'ptt-w' }); body.append(box);
+    title: 'Transmit', desc: 'TX/RX status and a hold-to-talk PTT.', sizes: ['XS', 'S', 'M'], size: 'S',
+    mount(body, ctx) {
+      const box = el('div', { class: ctx.size === 'XS' ? 'xs-row' : 'ptt-w' }); body.append(box);
       const t = el('span'); box.append(t); const trx = new H.TxIndicator(t);
       const b = el('button'); box.append(b); const ptt = new H.Ptt(b);
       ptt.on('ptt', (e) => station.set({ tx: e.detail.on }));
@@ -341,13 +394,13 @@ const TYPES = {
   },
 };
 
-const DEFAULT = [['panadapter', 'XL'], ['vfo', 'M'], ['meters', 'M'], ['ft8', 'L'], ['clock', 'S'], ['solar', 'S'], ['dx', 'M'], ['ptt', 'S'], ['knobs', 'M'], ['mode', 'M']];
+const DEFAULT = [['panadapter', 'XL'], ['vfo', 'M'], ['meters', 'M'], ['ft8', 'L'], ['clock', 'XS'], ['solar', 'XS'], ['ptt', 'XS'], ['dx', 'XS'], ['knobs', 'M'], ['mode', 'M']];
 
 /* ---------- board ---------- */
 const board = $('#board');
 const app = $('#app');
 const live = new Map(); // id -> {node, cleanup}
-const KEY = 'hamui-dashboard-layout-v2';
+const KEY = 'hamui-dashboard-layout-v3';
 
 function loadLayout() {
   try { const l = JSON.parse(localStorage.getItem(KEY)); if (Array.isArray(l) && l.every(([t, s]) => TYPES[t] && TYPES[t].sizes.includes(s))) return l; } catch { /* storage unavailable */ }
@@ -439,6 +492,7 @@ board.addEventListener('click', (e) => {
   if (sb && sb.dataset.v !== node.dataset.size) {
     node.querySelectorAll('.w-sizes button').forEach((b) => b.setAttribute('aria-pressed', b === sb));
     flip(() => { node.dataset.size = sb.dataset.v; });
+    H.haptics.fire('select');
     mountContent(node); saveLayout();
   }
 });
@@ -467,7 +521,7 @@ board.addEventListener('pointerdown', (e) => {
     if (!press) return;
     if (!editing) setEditing(true);
     press.armed = true;
-    navigator.vibrate?.(10);
+    H.haptics.fire('press');
   }, holdMs);
 });
 
@@ -514,6 +568,7 @@ function moveDrag(e) {
   const ref = after ? over.nextSibling : over;
   if (ref === slot || (after && over.nextSibling === slot) || (!after && over.previousSibling === slot)) return;
   flip(() => board.insertBefore(slot, ref));
+  H.haptics.fire('snap');
 }
 
 function endDrag() {
@@ -528,6 +583,7 @@ function endDrag() {
   }
   document.body.style.userSelect = '';
   drag = null; lastTarget = null;
+  H.haptics.fire('snap');
   saveLayout();
 }
 
