@@ -23,7 +23,7 @@ const DEFAULTS = {
   subtitle: '',
   toolbar: true,            // render the title bar with Edit / Add / Reset
   editable: true,
-  optionsButton: 'always',  // when cards show their options button: 'always' | 'edit' | 'never'
+  optionsButton: 'edit',    // when cards show their options button: 'edit' (edit mode only) | 'always' | 'never'
   holdToEdit: 500,          // ms touch hold on a card that enters edit mode (0 = off)
   holdToDrag: 280,          // ms touch hold before a card can be dragged in edit mode
   haptics: true,
@@ -258,7 +258,7 @@ export class Dashboard {
       this.resetBtn = bar.querySelector('[data-act=reset]');
       this.editBtn = bar.querySelector('[data-act=edit]');
       this.editBtn.hidden = !o.editable;
-      this.hint = el('div', 'hd-hint', 'Drag cards to rearrange them. Change the size in a card’s bottom-right corner, remove it with − . On a touch screen, hold a card for a moment before dragging. Press <kbd>Esc</kbd> when done.');
+      this.hint = el('div', 'hd-hint', 'Drag cards to rearrange them. Change the size in a card’s bottom-right corner, its settings with the sliders button, and remove it with − . On a touch screen, hold a card for a moment before dragging. Press <kbd>Esc</kbd> when done.');
       this.hint.hidden = true;
       this.el.append(bar, this.hint);
     }

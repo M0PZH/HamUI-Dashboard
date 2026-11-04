@@ -3,7 +3,7 @@
 A user-customisable, drag-and-drop widget dashboard for ham radio software, built on
 [HamUI](https://github.com/M0PZH/HamUI). Users choose which widgets to show, resize them
 (XS / S / M / L / XL), rearrange them by dragging (mouse, trackpad or touch) and change
-each widget's settings from the options button on its card.
+each widget's settings from the options button on its card (shown in edit mode).
 
 This is an extension: it uses HamUI (a peer dependency) but is not part of it.
 
@@ -57,7 +57,7 @@ const dash = new Dashboard(element, {
   title: 'Dashboard', subtitle: '',
   toolbar: true,            // title bar with Edit / Add widget / Reset layout
   editable: true,
-  optionsButton: 'always',  // 'always' | 'edit' | 'never'
+  optionsButton: 'edit',    // options button in edit mode only; 'always' | 'never'
   holdToEdit: 500,          // touch: hold a card this long to enter edit mode
   holdToDrag: 280,          // touch: hold before dragging in edit mode
   haptics: true,            // HamUI.haptics on pick-up, reorder, drop, resize
