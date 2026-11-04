@@ -1,0 +1,44 @@
+{
+  "name": "hamui-dashboard",
+  "version": "0.1.0",
+  "description": "A drag-and-drop, user-customisable widget dashboard for ham radio software, built on HamUI.",
+  "type": "module",
+  "license": "MIT",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "main": "./dist/hamui-dashboard.umd.cjs",
+  "module": "./dist/hamui-dashboard.js",
+  "style": "./dist/hamui-dashboard.css",
+  "exports": {
+    ".": {
+      "import": "./dist/hamui-dashboard.js",
+      "require": "./dist/hamui-dashboard.umd.cjs"
+    },
+    "./css": "./dist/hamui-dashboard.css",
+    "./src/*": "./src/*"
+  },
+  "sideEffects": [
+    "*.css",
+    "./src/build-entry.js"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "build:site": "vite build --mode site",
+    "preview": "vite preview"
+  },
+  "peerDependencies": {
+    "hamui": ">=0.1.0"
+  },
+  "devDependencies": {
+    "hamui": "github:M0PZH/HamUI",
+    "vite": "^6.3.5"
+  },
+  "homepage": "https://m0pzh.github.io/HamUI-Dashboard/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/M0PZH/HamUI-Dashboard.git"
+  }
+}
