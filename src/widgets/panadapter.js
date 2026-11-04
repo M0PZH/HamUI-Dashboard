@@ -6,7 +6,7 @@ import { h, needStore } from './util.js';
 export default {
   type: 'panadapter',
   title: 'Panadapter',
-  description: 'Spectrum and waterfall. Click or drag the passband to tune; pinch or Ctrl-scroll to zoom.',
+  description: 'Spectrum and waterfall. Click or drag to tune, drag the scale to pan, pinch to zoom.',
   sizes: ['L', 'XL'],
   size: 'XL',
   flush: true,
@@ -14,9 +14,12 @@ export default {
     { key: 'colormap', type: 'select', label: 'Waterfall colours', default: 'theme', choices: [
       { value: 'theme', label: 'Theme' }, { value: 'viridis', label: 'Viridis' }, { value: 'inferno', label: 'Inferno' },
       { value: 'plasma', label: 'Plasma' }, { value: 'turbo', label: 'Turbo' }, { value: 'gray', label: 'Grey' }] },
-    { key: 'dragTune', type: 'segmented', label: 'Dragging', default: 'passband', choices: [
-      { value: 'passband', label: 'Passband tunes' }, { value: 'always', label: 'Always tunes' }, { value: 'off', label: 'Always pans' }],
-      help: 'Drag the passband to retune; drag elsewhere to pan.' },
+    { key: 'dragTune', type: 'select', label: 'Click and drag', default: 'press', choices: [
+      { value: 'press', label: 'Tune anywhere; drag the frequency scale to pan' },
+      { value: 'passband', label: 'Drag the passband to tune; drag elsewhere to pan' },
+      { value: 'always', label: 'Every drag moves the tune' },
+      { value: 'off', label: 'Click tunes; drag pans' }],
+      help: 'Two-finger swipe on a trackpad always pans.' },
     { key: 'split', type: 'range', label: 'Spectrum height', min: 25, max: 75, step: 5, unit: '%', default: 45 },
     { key: 'averaging', type: 'segmented', label: 'Averaging', default: 0.35, choices: [
       { value: 1, label: 'Off' }, { value: 0.5, label: 'Low' }, { value: 0.35, label: 'Mid' }, { value: 0.2, label: 'High' }] },
