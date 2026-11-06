@@ -161,3 +161,10 @@
 .hdw-xs-spot .hdw-xs-val { font-size: 16px; }
 .hdw-xs-spot:focus-visible { outline: 2px solid var(--ham-accent); outline-offset: 2px; }
 .hdw-xs-spot:disabled { cursor: default; }
+
+/* Scrollable flex content keeps its natural height; the body owns scrolling. */
+.hd-card-head { flex-shrink: 0; }
+.hd-card-body { overflow: auto; scrollbar-gutter: stable; }
+.hd-card-body > * { flex-shrink: 0; }
+.hd-card-body.is-flush { overflow: hidden; scrollbar-gutter: auto; }
+.hd-card-body.is-flush > * { flex-shrink: 1; }

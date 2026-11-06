@@ -22,8 +22,10 @@ import { Segmented } from 'hamui';
 
 const norm = (choices = []) => choices.map((c) => (c && typeof c === 'object' ? { value: c.value, label: c.label ?? String(c.value) } : { value: c, label: String(c) }));
 
+const HEIGHT = { key: '_height', type: 'number', label: 'Widget height', min: 0, max: 24, step: 1, unit: 'rows', default: 0, help: '0 uses the size preset; each row is half a grid cell.' };
+
 export function fieldsFor(def, size) {
-  return def.options.filter((f) => f.key && (!f.sizes || f.sizes.includes(size)));
+  return [...def.options, HEIGHT].filter((f) => f.key && (!f.sizes || f.sizes.includes(size)));
 }
 
 export function hasOptions(def, size) { return fieldsFor(def, size).length > 0; }
@@ -60,7 +62,7 @@ function coerce(f, v, size) {
 /** Values for every option of `def` at `size`: saved overrides on top of defaults. */
 export function resolveOptions(def, size, saved = {}) {
   const out = {};
-  for (const f of def.options) {
+  for (const f of [...def.options, HEIGHT]) {
     if (!f.key) continue;
     out[f.key] = f.key in saved ? coerce(f, saved[f.key], size) : defaultOf(f, size);
   }
@@ -82,6 +84,7 @@ export function renderOptionsForm(container, def, size, values, onChange) {
     const id = `hd-opt-${++uid}`;
     const wrap = document.createElement('div');
     wrap.className = 'ham-field hd-opt';
+    wrap.dataset.key = f.key;
     wrap.dataset.type = f.type || 'text';
     const v = values[f.key];
     const label = (forId) => { const l = document.createElement(forId ? 'label' : 'span'); l.className = 'hd-opt-label'; if (forId) l.htmlFor = forId; l.textContent = f.label ?? f.key; return l; };
@@ -177,5 +180,15 @@ export function renderOptionsForm(container, def, size, values, onChange) {
     if (f.help) { const h = document.createElement('span'); h.className = 'ham-field-help'; h.textContent = f.help; wrap.append(h); }
     container.append(wrap);
   }
-  return () => cleanups.forEach((c) => c());
+  const cleanup = () => cleanups.forEach((c) => c());
+  cleanup.update = (next) => {
+    for (const wrap of container.children) {
+      const value = next[wrap.dataset.key];
+      const input = wrap.querySelector('input[type=number], input[type=text], input[type=range], select');
+      if (input && input.value !== String(value ?? '')) input.value = value ?? '';
+      const checkbox = wrap.querySelector('input[type=checkbox]');
+      if (wrap.dataset.type === 'toggle' && checkbox) checkbox.checked = !!value;
+    }
+  };
+  return cleanup;
 }

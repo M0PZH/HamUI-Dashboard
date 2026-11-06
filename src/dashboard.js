@@ -157,6 +157,7 @@ export class Dashboard {
     if (!c) return;
     c.saved = { ...c.saved, ...patch };
     this._applyOptions(c);
+    if (this._optCard === c) this._optCleanup?.update?.(c.options);
     this._changed();
   }
 
@@ -165,6 +166,7 @@ export class Dashboard {
     if (!c) return;
     c.saved = {};
     this._applyOptions(c);
+    if (this._optCard === c) this._optCleanup?.update?.(c.options);
     this._changed();
   }
 
@@ -360,6 +362,7 @@ export class Dashboard {
     c.statusEl.textContent = '';
     this._setTitle(c, def.title);
     c.options = resolveOptions(def, c.size, c.saved);
+    this._height(c);
     c.optBtn.hidden = this.options.optionsButton === 'never' || !hasOptions(def, c.size);
     c.ac = new AbortController();
     const ctx = {
@@ -393,15 +396,22 @@ export class Dashboard {
     c.ac = null;
   }
 
+  _height(c) {
+    const rows = Math.round(c.options._height || 0);
+    if (rows > 0) c.node.style.gridRow = `span ${rows}`;
+    else c.node.style.removeProperty('grid-row');
+  }
+
   _applyOptions(c) {
     const prev = c.options;
     const next = resolveOptions(c.def, c.size, c.saved);
     c.options = next;
+    this._height(c);
     // widgets that can update in place say so by returning anything but false
     if (c.handle?.update) {
       let ok = false;
       try { ok = c.handle.update(next, prev) !== false; } catch (err) { console.error(err); }
-      if (ok) { c.ctx.options = next; return; }
+      if (ok) { c.ctx.options = c.options; return; }
     }
     this._mount(c);
   }

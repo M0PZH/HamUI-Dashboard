@@ -159,3 +159,7 @@ npm run build:site   # site-dist/, published by .github/workflows/pages.yml
 
 HamUI comes from GitHub as a dev dependency; set `HAMUI_DIR=../HamUI` to develop against a local checkout.
 `design/` holds the original design mockup.
+
+Every card offers **Widget height** in its options: 0 follows the size
+preset; 1–24 sets its independent height in half-cell grid rows. The saved
+`options._height` follows the card across reloads. Width still follows XS–XL.
