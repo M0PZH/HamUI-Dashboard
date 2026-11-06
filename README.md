@@ -163,3 +163,12 @@ HamUI comes from GitHub as a dev dependency; set `HAMUI_DIR=../HamUI` to develop
 Every card offers **Widget height** in its options: 0 follows the size
 preset; 1–24 sets its independent height in half-cell grid rows. The saved
 `options._height` follows the card across reloads. Width still follows XS–XL.
+
+
+`dashboard.refreshOptions(types?)` re-evaluates dynamic field defaults without
+saving them as overrides; optional `types` limits refresh to widget types.
+Widget `update(next, previous, {source})` receives `source: 'defaults'` for
+refreshes and `'user'` for ordinary edits. `setOptions(id, patch, meta?)`
+accepts an optional source and removes overrides whose patch value is
+`undefined`, restoring their current default. Mounted widgets can use this
+to normalise linked fields without treating a derived change as a user edit.

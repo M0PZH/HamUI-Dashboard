@@ -152,11 +152,13 @@ export class Dashboard {
   }
 
   /** Change some of a card's options (merged into what the user set). */
-  setOptions(id, patch) {
+  setOptions(id, patch, meta = { source: 'user' }) {
     const c = this._card(id);
     if (!c) return;
-    c.saved = { ...c.saved, ...patch };
-    this._applyOptions(c);
+    for (const [key, value] of Object.entries(patch)) {
+      if (value === undefined) delete c.saved[key]; else c.saved[key] = value;
+    }
+    this._applyOptions(c, meta);
     if (this._optCard === c) this._optCleanup?.update?.(c.options);
     this._changed();
   }
@@ -165,7 +167,7 @@ export class Dashboard {
     const c = this._card(id);
     if (!c) return;
     c.saved = {};
-    this._applyOptions(c);
+    this._applyOptions(c, { source: 'defaults' });
     if (this._optCard === c) this._optCleanup?.update?.(c.options);
     this._changed();
   }
@@ -402,7 +404,15 @@ export class Dashboard {
     else c.node.style.removeProperty('grid-row');
   }
 
-  _applyOptions(c) {
+  /** Re-evaluate dynamic defaults without storing them as user overrides. */
+  refreshOptions(types = null) {
+    for (const c of this.cards.values()) {
+      if (!types || types.includes(c.type)) this._applyOptions(c, { source: 'defaults' });
+    }
+    if (this._optCard) this._optCleanup?.update?.(this._optCard.options);
+  }
+
+  _applyOptions(c, meta = { source: 'user' }) {
     const prev = c.options;
     const next = resolveOptions(c.def, c.size, c.saved);
     c.options = next;
@@ -410,7 +420,7 @@ export class Dashboard {
     // widgets that can update in place say so by returning anything but false
     if (c.handle?.update) {
       let ok = false;
-      try { ok = c.handle.update(next, prev) !== false; } catch (err) { console.error(err); }
+      try { ok = c.handle.update(next, prev, meta) !== false; } catch (err) { console.error(err); }
       if (ok) { c.ctx.options = c.options; return; }
     }
     this._mount(c);
