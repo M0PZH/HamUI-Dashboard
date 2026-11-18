@@ -24,10 +24,9 @@ export default {
     { key: 'averaging', type: 'segmented', label: 'Averaging', default: 0.35, choices: [
       { value: 1, label: 'Off' }, { value: 0.5, label: 'Low' }, { value: 0.35, label: 'Mid' }, { value: 0.2, label: 'High' }] },
     { key: 'peakHold', type: 'toggle', label: 'Peak hold', default: true },
-    { key: 'minDb', type: 'number', label: 'Spectrum floor', unit: 'dBm', min: -170, max: 0, step: 1, default: -128 },
-    { key: 'maxDb', type: 'number', label: 'Spectrum top', unit: 'dBm', min: -170, max: 0, step: 1, default: -62 },
-    { key: 'wfMinDb', type: 'number', label: 'Waterfall floor', unit: 'dBm', min: -170, max: 0, step: 1, default: -125 },
-    { key: 'wfMaxDb', type: 'number', label: 'Waterfall top', unit: 'dBm', min: -170, max: 0, step: 1, default: -75 },
+    { type: 'levels', keys: ['minDb', 'maxDb'], label: 'Spectrum range', unit: 'dBm', min: -170, max: 0, step: 1, minGap: 10, default: [-128, -62] },
+    { type: 'levels', keys: ['wfMinDb', 'wfMaxDb'], label: 'Waterfall range', unit: 'dBm', min: -170, max: 0, step: 1, minGap: 5, default: [-125, -75],
+      gradient: { option: 'colormap' }, auto: true },
   ],
   mount(ctx) {
     if (needStore(ctx)) return;
@@ -69,6 +68,11 @@ export default {
         pan.spectrum.setPeakHold(n.peakHold);
         pan.spectrum.setLevels(Math.min(n.minDb, n.maxDb - 10), n.maxDb);
         pan.waterfall.setLevels(Math.min(n.wfMinDb, n.wfMaxDb - 5), n.wfMaxDb);
+      },
+      auto(keys) {
+        if (keys[0] !== 'wfMinDb') return null;
+        pan.waterfall.autoLevel();
+        return [pan.waterfall.options.minDb, pan.waterfall.options.maxDb];
       },
       resize: () => true,
       destroy() { offs.forEach((f) => f()); pan.destroy(); },

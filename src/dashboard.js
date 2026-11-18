@@ -7,8 +7,10 @@
 //     storage: 'my-app-dashboard',            // localStorage key, {load, save} or null
 //   });
 //
-// Layout JSON: { version: 1, items: [{ id, type, size, options }] } where
-// `options` holds only the values the user changed.
+// Layout JSON: { version: 1, items: [{ id, type, size, h?, w?, options }] } where
+// `options` holds only the values the user changed, `h` a height in grid rows
+// (half a cell) other than the size's, and `w` a width in columns (freeSize
+// widgets only: any whole number of columns and rows, without a maximum).
 import { haptics, Modal } from 'hamui';
 import { widgets as registry } from './registry.js';
 import { resolveOptions, hasOptions, renderOptionsForm } from './options.js';
@@ -31,6 +33,11 @@ const DEFAULTS = {
 
 const GRIP = '<svg class="hd-grip" viewBox="0 0 14 14" fill="currentColor" aria-hidden="true"><circle cx="4" cy="3" r="1.2"/><circle cx="10" cy="3" r="1.2"/><circle cx="4" cy="7" r="1.2"/><circle cx="10" cy="7" r="1.2"/><circle cx="4" cy="11" r="1.2"/><circle cx="10" cy="11" r="1.2"/></svg>';
 const SLIDERS = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><path d="M2 4h7M13 4h1M2 12h1M7 12h7M2 8h3M9 8h5"/><circle cx="11" cy="4" r="1.6"/><circle cx="5" cy="12" r="1.6"/><circle cx="7" cy="8" r="1.6"/></svg>';
+const CORNER = '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M10.5 4.5v6h-6M10.5 10.5 6 6"/></svg>';
+// grid footprint of each size: columns (0 = every column) and rows (half cells)
+const SIZE_COLS = { XS: 1, S: 1, M: 2, L: 2, XL: 0 };
+const SIZE_ROWS = { XS: 1, S: 2, M: 2, L: 4, XL: 4 };
+const MAX_ROWS = 24; // freeSize widgets have no limit
 // controls that keep their own touch gestures: a hold there is not "enter edit mode"
 const INTERACTIVE = 'button, input, select, textarea, a[href], label, [role="slider"], [role="spinbutton"], [role="application"], [contenteditable], .hd-no-hold';
 
@@ -76,6 +83,8 @@ export class Dashboard {
       items: this._nodes().map((n) => {
         const c = this.cards.get(n);
         const item = { id: c.id, type: c.type, size: c.size };
+        if (c.h) item.h = c.h;
+        if (c.w) item.w = c.w;
         if (Object.keys(c.saved).length) item.options = { ...c.saved };
         return item;
       }),
@@ -120,12 +129,32 @@ export class Dashboard {
     this._changed();
   }
 
+  /** Choose a size preset; a custom height or width goes back to the preset's. */
   resize(id, size) {
     const c = this._card(id);
-    if (!c || !c.def.sizes.includes(size) || c.size === size) return;
+    if (!c || !c.def.sizes.includes(size)) return;
+    const custom = c.h || c.w;
+    c.h = null; c.w = null;
+    if (c.size === size) { if (custom) { this._flip(() => this._span(c)); this._changed(); } return; }
+    this._setSize(c, size, () => this._span(c));
+    this._haptic('select');
+    this._changed();
+  }
+
+  /**
+   * Set a card's height in grid rows (half cells) and, for freeSize widgets,
+   * its width in columns; null follows the size preset.
+   */
+  setSpan(id, { rows, cols } = {}) {
+    const c = this._card(id);
+    if (!c) return;
+    if (this._fit(c, cols ?? this._colsOf(c), rows ?? this._rowsOf(c))) this._changed();
+  }
+
+  _setSize(c, size, also) {
     c.size = size;
     c.node.querySelectorAll('.hd-sizes button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.size === size)));
-    this._flip(() => { c.node.dataset.size = size; });
+    this._flip(() => { c.node.dataset.size = size; also?.(); });
     // widgets that can follow a size change in place say so by returning anything but false
     let kept = false;
     if (c.handle?.resize) {
@@ -138,8 +167,67 @@ export class Dashboard {
       }
     }
     if (!kept) this._mount(c);
-    this._haptic('select');
-    this._changed();
+  }
+
+  /* ---------------- grid footprint ---------------- */
+
+  /** Columns in the grid now (4, or 2 on narrow screens). */
+  get columns() {
+    // from --hd-cols: the computed track list would also count implicit
+    // columns that a too-wide card has just created
+    const cs = getComputedStyle(this.board);
+    return parseInt(cs.getPropertyValue('--hd-cols'), 10) || cs.gridTemplateColumns.split(' ').filter(Boolean).length || 1;
+  }
+
+  _presetCols(size, cols = this.columns) { return Math.min(SIZE_COLS[size] || cols, cols); }
+
+  _colsOf(c) { return Math.min(c.w ?? this._presetCols(c.size), this.columns); }
+
+  _rowsOf(c) { return c.h ?? SIZE_ROWS[c.size]; }
+
+  /** Apply a card's custom span (the preset span comes from the CSS). */
+  _span(c) {
+    if (c.h) c.node.style.gridRow = `span ${c.h}`;
+    else c.node.style.removeProperty('grid-row');
+    if (c.w) c.node.style.gridColumn = `span ${Math.min(c.w, this.columns)}`;
+    else c.node.style.removeProperty('grid-column');
+  }
+
+  /**
+   * Fit a card to about `cols` × `rows`. Fixed-size widgets snap the width to
+   * one of their sizes (the one whose height is closest); freeSize widgets
+   * take any width. Returns true when something changed.
+   */
+  _fit(c, cols, rows) {
+    const n = this.columns;
+    const free = !!c.def.freeSize;
+    rows = Math.max(1, Math.round(free ? rows : Math.min(MAX_ROWS, rows)));
+    cols = Math.max(1, Math.min(n, Math.round(cols)));
+    let size = c.size;
+    if (!free) {
+      const widths = [...new Set(c.def.sizes.map((s) => this._presetCols(s, n)))];
+      cols = widths.reduce((a, b) => (Math.abs(b - cols) < Math.abs(a - cols) ? b : a));
+      const fits = c.def.sizes.filter((s) => this._presetCols(s, n) === cols);
+      size = fits.includes(c.size) && SIZE_ROWS[c.size] === rows ? c.size
+        : fits.reduce((a, b) => (Math.abs(SIZE_ROWS[b] - rows) < Math.abs(SIZE_ROWS[a] - rows) ? b : a));
+    }
+    const h = rows === SIZE_ROWS[size] ? null : rows;
+    const w = free && cols !== this._presetCols(size, n) ? cols : null;
+    if (size === c.size && h === c.h && w === c.w) return false;
+    c.h = h; c.w = w;
+    if (size !== c.size) {
+      c.node.querySelectorAll('.hd-sizes button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.size === size)));
+      this._setSize(c, size, () => this._span(c));
+    } else this._flip(() => this._span(c));
+    return true;
+  }
+
+  _spanLabel(c) {
+    const rows = this._rowsOf(c), cols = this._colsOf(c);
+    const cells = rows / 2;
+    const tall = `${Number.isInteger(cells) ? cells : `${Math.floor(cells) || ''}½`} high`;
+    if (c.def.freeSize) return `${cols} × ${tall}${c.h || c.w ? '' : ' · preset'}`;
+    return `${c.size} · ${tall}${c.h ? '' : ' · preset'}`;
   }
 
   /** Move a card to position `index` among the cards. */
@@ -229,6 +317,7 @@ export class Dashboard {
     this.cards.clear();
     this._ac.abort();
     this._ro?.disconnect();
+    this._boardRO?.disconnect();
     this._optCleanup?.();
     this.gallery.destroy();
     this.optionsDlg.destroy();
@@ -263,7 +352,7 @@ export class Dashboard {
       this.resetBtn = bar.querySelector('[data-act=reset]');
       this.editBtn = bar.querySelector('[data-act=edit]');
       this.editBtn.hidden = !o.editable;
-      this.hint = el('div', 'hd-hint', 'Drag cards to rearrange them. Change the size in a card’s bottom-right corner, its settings with the sliders button, and remove it with − . On a touch screen, hold a card for a moment before dragging. Press <kbd>Esc</kbd> when done.');
+      this.hint = el('div', 'hd-hint', 'Drag cards to rearrange them. Pick a size with XS–XL or drag a card’s bottom-right corner (double-click it for the preset), change its settings with the sliders button, and remove it with − . On a touch screen, hold a card for a moment before dragging. Press <kbd>Esc</kbd> when done.');
       this.hint.hidden = true;
       this.el.append(bar, this.hint);
     }
@@ -305,7 +394,12 @@ export class Dashboard {
       if (!def.sizes.includes(it.size)) it.size = def.size;
       if (!it.id || seen.has(it.id)) it.id = newId(it.type);
       seen.add(it.id);
-      it.options = it.options && typeof it.options === 'object' ? it.options : {};
+      it.options = it.options && typeof it.options === 'object' ? { ...it.options } : {};
+      // the height used to be an option
+      if (it.h == null && it.options._height > 0) it.h = it.options._height;
+      delete it.options._height;
+      it.h = it.h > 0 ? Math.round(it.h) : null;
+      it.w = def.freeSize && it.w > 0 ? Math.round(it.w) : null;
       out.push(it);
     }
     return out;
@@ -316,7 +410,7 @@ export class Dashboard {
     return d && (!this.options.widgets || this.options.widgets.includes(type)) ? d : null;
   }
 
-  _createCard({ type, id = newId(type), size, options = {} }) {
+  _createCard({ type, id = newId(type), size, h = null, w = null, options = {} }) {
     const def = this._def(type);
     const node = el('article', 'hd-card');
     Object.assign(node.dataset, { type, size, id });
@@ -327,10 +421,12 @@ export class Dashboard {
         <button class="hd-card-options ham-btn ham-btn-ghost ham-btn-sm ham-btn-icon" type="button" hidden>${SLIDERS}</button></header>
       <div class="hd-card-body"></div>
       <button class="hd-remove" type="button">−</button>
-      <div class="hd-sizes ham-seg ham-seg-sm ham-seg-mono" role="group" aria-label="Size">${def.sizes.map((s) => `<button type="button" data-size="${s}" aria-pressed="${s === size}">${s}</button>`).join('')}</div>`;
+      <div class="hd-sizes ham-seg ham-seg-sm ham-seg-mono" role="group" aria-label="Size">${def.sizes.map((s) => `<button type="button" data-size="${s}" aria-pressed="${s === size}">${s}</button>`).join('')}</div>
+      <div class="hd-resize" title="Drag to resize, double-click for the preset size" aria-hidden="true">${CORNER}</div>`;
     if (def.sizes.length < 2) node.querySelector('.hd-sizes').remove();
+    if (def.freeSize) node.dataset.free = '';
     const card = {
-      id, type, def, size, node,
+      id, type, def, size, node, h, w,
       saved: { ...options },
       options: {},
       title: def.title,
@@ -343,6 +439,7 @@ export class Dashboard {
     };
     this._setTitle(card, def.title);
     this.cards.set(node, card);
+    this._span(card);
     return card;
   }
 
@@ -365,7 +462,6 @@ export class Dashboard {
     c.statusEl.textContent = '';
     this._setTitle(c, def.title);
     c.options = resolveOptions(def, c.size, c.saved);
-    this._height(c);
     c.optBtn.hidden = this.options.optionsButton === 'never' || !hasOptions(def, c.size);
     c.ac = new AbortController();
     const ctx = {
@@ -399,12 +495,6 @@ export class Dashboard {
     c.ac = null;
   }
 
-  _height(c) {
-    const rows = Math.round(c.options._height || 0);
-    if (rows > 0) c.node.style.gridRow = `span ${rows}`;
-    else c.node.style.removeProperty('grid-row');
-  }
-
   /** Re-evaluate dynamic defaults without storing them as user overrides. */
   refreshOptions(types = null) {
     for (const c of this.cards.values()) {
@@ -417,7 +507,6 @@ export class Dashboard {
     const prev = c.options;
     const next = resolveOptions(c.def, c.size, c.saved);
     c.options = next;
-    this._height(c);
     // widgets that can update in place say so by returning anything but false
     if (c.handle?.update) {
       let ok = false;
@@ -457,7 +546,9 @@ export class Dashboard {
   _renderOptions() {
     const c = this._optCard;
     this._optCleanup?.();
-    this._optCleanup = renderOptionsForm(this.oForm, c.def, c.size, c.options, (key, value) => this.setOptions(c.id, { [key]: value }));
+    this._optCleanup = renderOptionsForm(this.oForm, c.def, c.size, c.options,
+      (key, value) => this.setOptions(c.id, typeof key === 'object' ? key : { [key]: value }),
+      { auto: c.handle?.auto ? (keys) => { try { return c.handle.auto(keys); } catch (err) { console.error(err); return null; } } : null });
   }
 
   /* ---------------- persistence ---------------- */
@@ -539,6 +630,12 @@ export class Dashboard {
       if (e.key === 'Escape' && this.editing && !this.gallery.el.open && !this.optionsDlg.el.open) this.edit(false);
     });
 
+    on(this.board, 'dblclick', (e) => {
+      const node = this.editing && e.target.closest('.hd-resize') && e.target.closest('.hd-card');
+      const c = node && this.cards.get(node);
+      if (c && (c.h || c.w)) { c.h = null; c.w = null; this._flip(() => this._span(c)); this._haptic('snap'); this._changed(); }
+    });
+
     on(this.board, 'click', (e) => {
       const node = e.target.closest('.hd-card');
       const c = node && this.cards.get(node);
@@ -559,7 +656,20 @@ export class Dashboard {
       const i = nodes.indexOf(node);
       const sizes = c.def.sizes, si = sizes.indexOf(c.size);
       let handled = true;
-      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { if (i > 0) this.move(c.id, i - 1); }
+      if (e.shiftKey && e.key.startsWith('Arrow')) {
+        // Shift+arrows: resize (height by half cells; width by column, or to the next size)
+        const dr = { ArrowUp: -1, ArrowDown: 1 }[e.key] || 0;
+        let cols = this._colsOf(c);
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+          const d = e.key === 'ArrowRight' ? 1 : -1;
+          if (c.def.freeSize) cols += d;
+          else {
+            const widths = [...new Set(sizes.map((s) => this._presetCols(s)))].sort((a, b) => a - b);
+            cols = widths[Math.max(0, Math.min(widths.length - 1, widths.indexOf(cols) + d))];
+          }
+        }
+        if (this._fit(c, cols, this._rowsOf(c) + dr)) { this._haptic('tick'); this._changed(); }
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { if (i > 0) this.move(c.id, i - 1); }
       else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { if (i < nodes.length - 1) this.move(c.id, i + 1); }
       else if (e.key === '+' || e.key === '=') { if (si < sizes.length - 1) this.resize(c.id, sizes[si + 1]); }
       else if (e.key === '-') { if (si > 0) this.resize(c.id, sizes[si - 1]); }
@@ -589,6 +699,14 @@ export class Dashboard {
     on(this.optionsDlg.el, 'close', () => { this._optCleanup?.(); this._optCleanup = null; this._optCard = null; });
 
     this._watchScroll(on);
+    let cols = 0;
+    this._boardRO = new ResizeObserver(() => {
+      const n = this.columns;
+      if (n === cols) return;
+      cols = n;
+      for (const c of this.cards.values()) if (c.w) this._span(c);
+    });
+    this._boardRO.observe(this.board);
 
     // ---- press / drag ----
     this._press = null;
@@ -598,7 +716,7 @@ export class Dashboard {
     on(window, 'pointerup', (e) => this._onUp(e));
     on(window, 'pointercancel', (e) => this._onUp(e));
     // keep touch scrolling from fighting a drag
-    on(document, 'touchmove', (e) => { if (this._drag || this._press?.armed) e.preventDefault(); }, { passive: false });
+    on(document, 'touchmove', (e) => { if (this._drag || this._sizing || this._press?.armed) e.preventDefault(); }, { passive: false });
     on(this.board, 'contextmenu', (e) => { if (this.editing || this._press) e.preventDefault(); });
   }
 
@@ -629,6 +747,7 @@ export class Dashboard {
   _onDown(e) {
     const node = e.target.closest('.hd-card');
     if (!node || !this.cards.has(node) || !this.options.editable) return;
+    if (e.target.closest('.hd-resize')) { if (this.editing) this._startResize(node, e); return; }
     if (e.target.closest('.hd-remove, .hd-sizes, .hd-card-options')) return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     const touch = e.pointerType !== 'mouse';
@@ -651,6 +770,8 @@ export class Dashboard {
   }
 
   _onMove(e) {
+    const z = this._sizing;
+    if (z && e.pointerId === z.id) { e.preventDefault(); this._moveResize(e); return; }
     const d = this._drag;
     if (d && e.pointerId === d.id) { e.preventDefault(); this._moveDrag(e); return; }
     const p = this._press;
@@ -661,6 +782,7 @@ export class Dashboard {
   }
 
   _onUp(e) {
+    if (this._sizing && e.pointerId === this._sizing.id) this._endResize();
     if (this._press && e.pointerId === this._press.id) this._cancelPress();
     if (this._drag && e.pointerId === this._drag.id) this._endDrag();
   }
@@ -672,11 +794,56 @@ export class Dashboard {
     this._press = null;
   }
 
+  /* ---- corner resize ---- */
+
+  _startResize(node, e) {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    e.preventDefault();
+    const c = this.cards.get(node);
+    const r = node.getBoundingClientRect();
+    const cs = getComputedStyle(this.board);
+    const gapY = parseFloat(cs.rowGap) || 0, gapX = parseFloat(cs.columnGap) || 0;
+    const n = this.columns;
+    this._sizing = {
+      c, id: e.pointerId, x: e.clientX, y: e.clientY, w0: r.width, h0: r.height,
+      unitY: parseFloat(cs.gridAutoRows) + gapY, gapY,
+      unitX: (this.board.clientWidth + gapX) / n, gapX,
+      chip: el('div', 'hd-span-chip'),
+      start: { size: c.size, h: c.h, w: c.w },
+    };
+    node.classList.add('is-resizing');
+    node.append(this._sizing.chip);
+    this._sizing.chip.textContent = this._spanLabel(c);
+    document.documentElement.classList.add('hd-resizing');
+    this._haptic('press');
+  }
+
+  _moveResize(e) {
+    const z = this._sizing;
+    const rows = (z.h0 + (e.clientY - z.y) + z.gapY) / z.unitY;
+    const cols = (z.w0 + (e.clientX - z.x) + z.gapX) / z.unitX;
+    if (this._fit(z.c, cols, rows)) {
+      z.chip.textContent = this._spanLabel(z.c);
+      this._haptic(z.c.h || z.c.w ? 'tick' : 'snap');
+    }
+  }
+
+  _endResize() {
+    const z = this._sizing;
+    this._sizing = null;
+    z.c.node.classList.remove('is-resizing');
+    z.chip.remove();
+    document.documentElement.classList.remove('hd-resizing');
+    const s = z.start;
+    if (s.size !== z.c.size || s.h !== z.c.h || s.w !== z.c.w) this._changed();
+  }
+
   _startDrag(node, e) {
     const r = node.getBoundingClientRect();
     const slot = el('div', 'hd-slot');
     slot.dataset.size = node.dataset.size;
     slot.style.gridRow = node.style.gridRow;
+    slot.style.gridColumn = node.style.gridColumn;
     node.after(slot);
     this._cancelPress();
     this._drag = { node, slot, id: e.pointerId, dx: e.clientX - r.left, dy: e.clientY - r.top, x: e.clientX, y: e.clientY, over: null, raf: 0 };

@@ -11,6 +11,9 @@
 //   number     min, max, step, unit
 //   range      min, max, step, unit (slider with a readout)
 //   text       placeholder, maxLength
+//   levels     keys: [lowKey, highKey], min, max, step, minGap, unit, default: [low, high],
+//              gradient (a colormap spec, or { option: 'colormap' } to follow another option),
+//              auto: true for an Auto button that asks the widget (handle.auto(keys) -> [low, high])
 // Common properties:
 //   label, help, default (a value, or (size) => value),
 //   sizes: only offered at these card sizes
@@ -18,14 +21,12 @@
 //
 // Only the values a user changes are saved; everything else follows the
 // defaults, so a default that depends on the size keeps doing so.
-import { Segmented } from 'hamui';
+import { Segmented, RangeSlider } from 'hamui';
 
 const norm = (choices = []) => choices.map((c) => (c && typeof c === 'object' ? { value: c.value, label: c.label ?? String(c.value) } : { value: c, label: String(c) }));
 
-const HEIGHT = { key: '_height', type: 'number', label: 'Widget height', min: 0, max: 24, step: 1, unit: 'rows', default: 0, help: '0 uses the size preset; each row is half a grid cell.' };
-
 export function fieldsFor(def, size) {
-  return [...def.options, HEIGHT].filter((f) => f.key && (!f.sizes || f.sizes.includes(size)));
+  return def.options.filter((f) => (f.key || f.keys) && (!f.sizes || f.sizes.includes(size)));
 }
 
 export function hasOptions(def, size) { return fieldsFor(def, size).length > 0; }
@@ -62,7 +63,12 @@ function coerce(f, v, size) {
 /** Values for every option of `def` at `size`: saved overrides on top of defaults. */
 export function resolveOptions(def, size, saved = {}) {
   const out = {};
-  for (const f of [...def.options, HEIGHT]) {
+  for (const f of def.options) {
+    if (f.type === 'levels' && f.keys) {
+      const d = defaultOf(f, size) || [f.min ?? 0, f.max ?? 100];
+      f.keys.forEach((k, i) => { out[k] = k in saved ? coerce({ type: 'number', min: f.min, max: f.max, default: d[i] }, saved[k], size) : d[i]; });
+      continue;
+    }
     if (!f.key) continue;
     out[f.key] = f.key in saved ? coerce(f, saved[f.key], size) : defaultOf(f, size);
   }
@@ -74,9 +80,10 @@ let uid = 0;
 /**
  * Build the form for `def` at `size` into `container`.
  * onChange(key, value) fires as the user edits (sliders and toggles live,
- * number and text fields when committed).
+ * number and text fields when committed); a levels field passes a patch
+ * object as `key`. actions.auto(keys), when given, backs the levels Auto button.
  */
-export function renderOptionsForm(container, def, size, values, onChange) {
+export function renderOptionsForm(container, def, size, values, onChange, actions = {}) {
   const cleanups = [];
   const fields = fieldsFor(def, size);
   container.replaceChildren();
@@ -84,7 +91,7 @@ export function renderOptionsForm(container, def, size, values, onChange) {
     const id = `hd-opt-${++uid}`;
     const wrap = document.createElement('div');
     wrap.className = 'ham-field hd-opt';
-    wrap.dataset.key = f.key;
+    if (f.key) wrap.dataset.key = f.key;
     wrap.dataset.type = f.type || 'text';
     const v = values[f.key];
     const label = (forId) => { const l = document.createElement(forId ? 'label' : 'span'); l.className = 'hd-opt-label'; if (forId) l.htmlFor = forId; l.textContent = f.label ?? f.key; return l; };
@@ -140,6 +147,34 @@ export function renderOptionsForm(container, def, size, values, onChange) {
         wrap.append(lab, box);
         break;
       }
+      case 'levels': {
+        const host = document.createElement('div');
+        const gradientOf = (vals) => (f.gradient?.option ? vals[f.gradient.option] : f.gradient ?? null);
+        const rs = new RangeSlider(host, {
+          label: f.label, min: f.min ?? 0, max: f.max ?? 100, step: f.step ?? 1, minGap: f.minGap ?? 0,
+          unit: f.unit ?? '', value: f.keys.map((k) => values[k]), gradient: gradientOf(values),
+        });
+        // an end left at its default is not saved (undefined removes the override)
+        const d = defaultOf(f, size) || [];
+        const patch = (v) => Object.fromEntries(f.keys.map((k, i) => [k, v[i] === d[i] ? undefined : v[i]]));
+        const send = (e) => onChange(patch(e.detail.value));
+        rs.on('input', send);
+        rs.on('change', send);
+        if (f.auto && actions.auto) {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'ham-btn ham-btn-sm ham-btn-ghost hd-opt-auto';
+          b.textContent = 'Auto';
+          b.title = 'Set from the current signal levels';
+          b.addEventListener('click', () => { const v = actions.auto(f.keys); if (v) { rs.setValue(v, { silent: true }); onChange(patch(rs.value)); } });
+          rs.extra.append(b);
+        }
+        wrap.dataset.keys = f.keys.join(' ');
+        wrap._levels = { rs, gradientOf };
+        cleanups.push(() => rs.destroy());
+        wrap.append(host);
+        break;
+      }
       case 'range': {
         const row = document.createElement('div');
         row.className = 'hd-opt-range';
@@ -183,6 +218,13 @@ export function renderOptionsForm(container, def, size, values, onChange) {
   const cleanup = () => cleanups.forEach((c) => c());
   cleanup.update = (next) => {
     for (const wrap of container.children) {
+      if (wrap._levels) {
+        const { rs, gradientOf } = wrap._levels;
+        rs.setValue(wrap.dataset.keys.split(' ').map((k) => next[k]), { silent: true });
+        const g = gradientOf(next);
+        if (g !== rs.options.gradient) rs.setGradient(g);
+        continue;
+      }
       const value = next[wrap.dataset.key];
       const input = wrap.querySelector('input[type=number], input[type=text], input[type=range], select');
       if (input && input.value !== String(value ?? '')) input.value = value ?? '';

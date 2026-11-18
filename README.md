@@ -45,6 +45,14 @@ The grid has 4 columns (2 on narrow screens). XS is half a cell high.
 | L | 2 × 2 |
 | XL | all × 2 |
 
+A card can also be taller or shorter than its size: in edit mode drag its bottom-right corner (or
+`Shift`+arrow keys). The height snaps to half cells; the width snaps to the widths of the widget's sizes,
+switching the size when it changes (an M dragged down to two cells becomes an L). Double-click the corner,
+or pick a size, to go back to the preset. Heights go up to 12 cells.
+
+A widget defined with `freeSize: true` (video, say) takes any whole number of columns and half cells, with no
+upper limit; it still snaps to the grid. On a narrower screen a wide card is clipped to the columns there.
+
 ## Dashboard
 
 ```js
@@ -73,11 +81,13 @@ dash.on('editchange', (e) => console.log(e.detail.editing));
 dash.toolbarExtra.append(myThemeSwitch);   // your own controls in the title bar
 ```
 
-Layout JSON: `{ "version": 1, "items": [{ "id", "type", "size", "options" }] }`. `options` holds only the
-values the user changed; the rest follow the widget's defaults.
+Layout JSON: `{ "version": 1, "items": [{ "id", "type", "size", "h", "w", "options" }] }`. `options` holds only the
+values the user changed; the rest follow the widget's defaults. `h` (rows of half a cell) and `w` (columns,
+`freeSize` widgets only) are present when the card differs from its size; `dash.setSpan(id, { rows, cols })`
+sets them from code. Layouts saved with the older `options._height` are moved to `h` when loaded.
 
-In edit mode: drag cards to reorder (or focus a card and use the arrow keys), change the size in the
-bottom-right corner (or `+` / `−`), remove with the − button (or Delete), and add widgets from the gallery.
+In edit mode: drag cards to reorder (or focus a card and use the arrow keys), pick a size with XS–XL
+(or `+` / `−`), drag the bottom-right corner to resize (or `Shift`+arrows), remove with the − button (or Delete), and add widgets from the gallery.
 `Esc` or Done leaves edit mode.
 
 ## Writing a widget
@@ -93,6 +103,7 @@ defineWidget({
   size: 'XS',
   multiple: false,       // may be added more than once?
   flush: false,          // body without padding (canvases)
+  freeSize: false,       // any width and height on the grid, without a maximum
   options: [
     { key: 'limit', type: 'number', label: 'Limit', min: 1.1, max: 5, step: 0.1, default: 2 },
     { key: 'sound', type: 'toggle', label: 'Beep', default: false },
@@ -126,6 +137,7 @@ Every field has `key`, `type`, `label`, `default` (a value, or `(size) => value`
 | `number` | number | `min`, `max`, `step`, `unit` |
 | `range` | number | slider with readout; `min`, `max`, `step`, `unit` |
 | `text` | string | `placeholder`, `maxLength` |
+| `levels` | two numbers | a two-handle `HamUI.RangeSlider`; `keys: [low, high]` instead of `key`, `default: [low, high]`, `min`, `max`, `step`, `minGap`, `unit`, `gradient` (a colormap, or `{ option: 'colormap' }` to follow another field), `auto: true` for an Auto button that calls the widget's `auto(keys)` → `[low, high]` |
 
 ## Store
 
@@ -159,11 +171,6 @@ npm run build:site   # site-dist/, published by .github/workflows/pages.yml
 
 HamUI comes from GitHub as a dev dependency; set `HAMUI_DIR=../HamUI` to develop against a local checkout.
 `design/` holds the original design mockup.
-
-Every card offers **Widget height** in its options: 0 follows the size
-preset; 1–24 sets its independent height in half-cell grid rows. The saved
-`options._height` follows the card across reloads. Width still follows XS–XL.
-
 
 `dashboard.refreshOptions(types?)` re-evaluates dynamic field defaults without
 saving them as overrides; optional `types` limits refresh to widget types.
