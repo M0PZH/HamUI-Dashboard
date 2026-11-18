@@ -3,9 +3,47 @@ import 'hamui/css';
 import '../src/css/dashboard.css';
 import './demo.css';
 import * as H from 'hamui';
-import { Dashboard, createStore, registerBuiltins } from '../src/index.js';
+import { Dashboard, createStore, registerBuiltins, defineWidget } from '../src/index.js';
 
 registerBuiltins();
+
+// A demo-only video card (a moving test card) to show freeSize: drag its
+// corner in edit mode to any number of columns and rows.
+defineWidget({
+  type: 'testcard',
+  title: 'Video',
+  description: 'A test card in a VideoPanel. Any size: drag its corner to resize it freely on the grid.',
+  sizes: ['M', 'L', 'XL'],
+  size: 'M',
+  flush: true,
+  freeSize: true,
+  multiple: true,
+  options: [],
+  mount(ctx) {
+    const box = document.createElement('div');
+    box.style.cssText = 'flex:1;min-height:0;display:flex;flex-direction:column';
+    ctx.el.append(box);
+    const vp = new H.VideoPanel(box, { aspect: 'fill', audio: false, label: 'Test card' });
+    vp.setTitle('N0CALL', 'H.265 · 1280×720 · test card');
+    const cv = vp.canvas, c = cv.getContext('2d');
+    cv.width = 640; cv.height = 360;
+    const bars = ['#c0c0c0', '#c0c000', '#00c0c0', '#00c000', '#c000c0', '#c00000', '#0000c0'];
+    let raf = 0;
+    const t0 = performance.now();
+    const draw = (now) => {
+      const W = 640, Hh = 360, t = (now - t0) / 1000;
+      c.fillStyle = '#10202e'; c.fillRect(0, 0, W, Hh);
+      const bw = (W * 0.6) / bars.length;
+      bars.forEach((col, i) => { c.fillStyle = col; c.fillRect(W * 0.2 + i * bw, Hh * 0.22, bw + 1, Hh * 0.38); });
+      c.fillStyle = '#fff'; c.font = '600 26px system-ui, sans-serif'; c.textAlign = 'center';
+      c.fillText('N0CALL  ·  IO91', W / 2, Hh * 0.78);
+      c.fillRect((Math.sin(t * 1.3) * 0.5 + 0.5) * W - 2, Hh * 0.88, 4, Hh * 0.06);
+      raf = requestAnimationFrame(draw);
+    };
+    raf = requestAnimationFrame(draw);
+    return { resize: () => true, destroy() { cancelAnimationFrame(raf); vp.destroy(); } };
+  },
+});
 
 /* ---------- simulated station ---------- */
 const store = createStore({
@@ -87,7 +125,7 @@ const dash = new Dashboard('#dash', {
   storage: 'hamui-dashboard-demo-v1',
   defaultLayout: [
     ['panadapter', 'XL'], ['vfo', 'M'], ['meters', 'M'], ['ft8', 'L'],
-    ['clock', 'XS'], ['solar', 'XS'], ['ptt', 'XS'], ['dx', 'XS'], ['knobs', 'M'], ['mode', 'M'],
+    ['clock', 'XS'], ['solar', 'XS'], ['ptt', 'XS'], ['dx', 'XS'], ['knobs', 'M'], ['mode', 'M'], ['testcard', 'M'],
   ],
 });
 
