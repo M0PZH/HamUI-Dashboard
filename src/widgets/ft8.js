@@ -1,4 +1,4 @@
-import { h, escape, needStore } from './util.js';
+import { h, escape, needStore, keepScroll } from './util.js';
 
 // store: decodes = [{ utc: '123015', db: -12, dt: 0.1, hz: 1234, msg: 'CQ K1ABC FN42' }], newest first
 export default {
@@ -21,17 +21,17 @@ export default {
     el.append(wrap);
     const tb = wrap.querySelector('tbody');
     const call = o.call.trim().toUpperCase();
-    const render = () => {
+    const render = () => keepScroll(wrap, () => {
       let list = store.state.decodes || [];
       if (o.cqOnly) list = list.filter((d) => /^CQ\b/.test(d.msg));
       list = list.slice(0, o.rows);
       tb.innerHTML = list.map((d) => {
         const mine = call && d.msg.toUpperCase().split(/\s+/).includes(call);
         const c = mine ? 'is-mine' : o.highlight && /^CQ\b/.test(d.msg) ? 'is-highlight' : '';
-        return `<tr${c ? ` class="${c}"` : ''}><td>${escape(d.utc)}</td><td class="ham-num">${escape(d.db)}</td><td class="ham-num">${escape(d.hz)}</td><td>${escape(d.msg)}</td></tr>`;
+        return `<tr data-key="${escape(`${d.utc}|${d.hz}|${d.msg}`)}"${c ? ` class="${c}"` : ''}><td>${escape(d.utc)}</td><td class="ham-num">${escape(d.db)}</td><td class="ham-num">${escape(d.hz)}</td><td>${escape(d.msg)}</td></tr>`;
       }).join('');
       setStatus(`${list.length} decodes`);
-    };
+    });
     render();
     return store.watch(['decodes'], render);
   },

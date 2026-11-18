@@ -21,3 +21,30 @@ export function needStore(ctx) {
   ctx.el.append(h('div', 'hd-error', 'No data store: pass <code>store</code> to the Dashboard.'));
   return true;
 }
+
+/**
+ * Re-render a scrolling list without moving what the user is reading.
+ * At the top it stays at the top (lists here are newest first); elsewhere
+ * the first visible row (an element with data-key) keeps its place, so rows
+ * added above or dropped below do not shift the view. Returns render()'s value.
+ */
+export function keepScroll(scroller, render) {
+  const top = scroller.scrollTop;
+  const atEnd = top > 1 && top + scroller.clientHeight >= scroller.scrollHeight - 2;
+  let key = null, offset = 0;
+  if (top > 1) {
+    const sr = scroller.getBoundingClientRect();
+    const head = scroller.querySelector('thead')?.offsetHeight || 0;
+    for (const row of scroller.querySelectorAll('[data-key]')) {
+      const r = row.getBoundingClientRect();
+      if (r.bottom > sr.top + head + 1) { key = row.dataset.key; offset = r.top - sr.top; break; }
+    }
+  }
+  const out = render();
+  if (top > 1) {
+    const row = key != null && [...scroller.querySelectorAll('[data-key]')].find((n) => n.dataset.key === key);
+    if (row) scroller.scrollTop += row.getBoundingClientRect().top - scroller.getBoundingClientRect().top - offset;
+    else scroller.scrollTop = atEnd ? scroller.scrollHeight : top;
+  }
+  return out;
+}

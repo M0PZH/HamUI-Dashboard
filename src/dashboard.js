@@ -228,6 +228,7 @@ export class Dashboard {
     for (const c of this.cards.values()) this._unmount(c);
     this.cards.clear();
     this._ac.abort();
+    this._ro?.disconnect();
     this._optCleanup?.();
     this.gallery.destroy();
     this.optionsDlg.destroy();
@@ -423,7 +424,34 @@ export class Dashboard {
       try { ok = c.handle.update(next, prev, meta) !== false; } catch (err) { console.error(err); }
       if (ok) { c.ctx.options = c.options; return; }
     }
+    const scroll = this._scrollState(c);
     this._mount(c);
+    this._restoreScroll(c, scroll);
+  }
+
+  // scrolled elements in a card body, by child-index path, so a remount
+  // (new options, refreshOptions) does not throw the user back to the top
+  _scrollState(c) {
+    const out = [];
+    const walk = (n, path) => {
+      if (n.scrollTop > 0) out.push([path, n.scrollTop]);
+      [...n.children].forEach((k, i) => { if (k.scrollHeight > k.clientHeight || k.children.length) walk(k, [...path, i]); });
+    };
+    walk(c.body, []);
+    return out;
+  }
+
+  _restoreScroll(c, state) {
+    if (!state.length) return;
+    const apply = () => {
+      for (const [path, top] of state) {
+        let n = c.body;
+        for (const i of path) n = n?.children[i];
+        if (n) n.scrollTop = top;
+      }
+    };
+    apply();
+    requestAnimationFrame(apply); // for widgets that fill in after mounting
   }
 
   _renderOptions() {
@@ -560,6 +588,8 @@ export class Dashboard {
     });
     on(this.optionsDlg.el, 'close', () => { this._optCleanup?.(); this._optCleanup = null; this._optCard = null; });
 
+    this._watchScroll(on);
+
     // ---- press / drag ----
     this._press = null;
     this._drag = null;
@@ -570,6 +600,30 @@ export class Dashboard {
     // keep touch scrolling from fighting a drag
     on(document, 'touchmove', (e) => { if (this._drag || this._press?.armed) e.preventDefault(); }, { passive: false });
     on(this.board, 'contextmenu', (e) => { if (this.editing || this._press) e.preventDefault(); });
+  }
+
+  // A scroller left at its end stays there when its content changes height.
+  // Without this, content that shrinks (a reading that stops wrapping) clamps
+  // scrollTop, and when it grows again the view is no longer at the end: it
+  // looks as if the list jumped up. Elsewhere the browser's scroll anchoring
+  // (overflow-anchor) keeps the view; keepScroll() covers re-rendered lists.
+  _watchScroll(on) {
+    this._atEnd = new WeakMap();
+    this._ro = new ResizeObserver((entries) => {
+      const seen = new Set();
+      for (const { target } of entries) {
+        const s = target.parentElement;
+        if (!s || seen.has(s)) continue;
+        seen.add(s);
+        if (this._atEnd.get(s)) s.scrollTop = s.scrollHeight;
+      }
+    });
+    on(this.board, 'scroll', (e) => {
+      const s = e.target;
+      if (!(s instanceof Element) || !this.board.contains(s)) return;
+      for (const k of s.children) this._ro.observe(k);
+      this._atEnd.set(s, s.scrollTop > 0 && s.scrollTop + s.clientHeight >= s.scrollHeight - 2);
+    }, { capture: true, passive: true });
   }
 
   _onDown(e) {
@@ -622,6 +676,7 @@ export class Dashboard {
     const r = node.getBoundingClientRect();
     const slot = el('div', 'hd-slot');
     slot.dataset.size = node.dataset.size;
+    slot.style.gridRow = node.style.gridRow;
     node.after(slot);
     this._cancelPress();
     this._drag = { node, slot, id: e.pointerId, dx: e.clientX - r.left, dy: e.clientY - r.top, x: e.clientX, y: e.clientY, over: null, raf: 0 };
@@ -683,7 +738,7 @@ export class Dashboard {
     const from = node.getBoundingClientRect();
     slot.replaceWith(node);
     node.classList.remove('is-dragging');
-    node.removeAttribute('style');
+    for (const k of ['width', 'height', 'left', 'top']) node.style.removeProperty(k);
     document.documentElement.classList.remove('hd-dragging');
     if (!reduced()) node.animate([{ transform: `translate(${from.left - to.left}px, ${from.top - to.top}px)` }, { transform: 'none' }], { duration: 160, easing: 'ease-out' });
     this._haptic('snap');

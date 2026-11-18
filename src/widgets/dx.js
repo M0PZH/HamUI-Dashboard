@@ -1,5 +1,5 @@
 import { bandForFrequency } from 'hamui';
-import { h, escape, needStore } from './util.js';
+import { h, escape, needStore, keepScroll } from './util.js';
 
 const MODES = ['CW', 'SSB', 'FT8', 'Other'];
 const group = (m) => (MODES.includes(m) ? m : ['USB', 'LSB'].includes(m) ? 'SSB' : 'Other');
@@ -50,11 +50,11 @@ export default {
       const tb = wrap.querySelector('tbody');
       let list = [];
       tb.addEventListener('click', (e) => { const tr = e.target.closest('tr[data-i]'); if (tr) tune(list[+tr.dataset.i]); });
-      render = () => {
+      render = () => keepScroll(wrap, () => {
         list = filtered();
-        tb.innerHTML = list.map((s, i) => `<tr data-i="${i}" tabindex="0" title="Tune to ${escape(s.dx)}"><td>${escape(s.dx)}</td><td class="ham-num">${(s.hz / 1000).toFixed(1)}</td><td>${escape(s.mode)}</td>${wide ? `<td>${escape(s.spotter)}</td><td>${escape(s.utc)}</td>` : ''}</tr>`).join('');
+        tb.innerHTML = list.map((s, i) => `<tr data-i="${i}" data-key="${escape(`${s.dx}|${s.hz}|${s.utc}`)}" tabindex="0" title="Tune to ${escape(s.dx)}"><td>${escape(s.dx)}</td><td class="ham-num">${(s.hz / 1000).toFixed(1)}</td><td>${escape(s.mode)}</td>${wide ? `<td>${escape(s.spotter)}</td><td>${escape(s.utc)}</td>` : ''}</tr>`).join('');
         setStatus(`${list.length} spots`);
-      };
+      });
       tb.addEventListener('keydown', (e) => { if (e.key === 'Enter') { const tr = e.target.closest('tr[data-i]'); if (tr) tune(list[+tr.dataset.i]); } });
     }
     render();

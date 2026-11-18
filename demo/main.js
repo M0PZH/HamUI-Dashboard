@@ -100,3 +100,6 @@ H.theme.onChange(() => themeSeg.select(H.theme.resolved(), { silent: true }));
 
 window.dash = dash; // for poking at in the console
 window.store = store;
+
+// for poking at the demo from the console
+Object.assign(window, { dashboard: dash, store });

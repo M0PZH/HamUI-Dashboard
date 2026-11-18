@@ -172,3 +172,10 @@ refreshes and `'user'` for ordinary edits. `setOptions(id, patch, meta?)`
 accepts an optional source and removes overrides whose patch value is
 `undefined`, restoring their current default. Mounted widgets can use this
 to normalise linked fields without treating a derived change as a user edit.
+
+A widget that re-renders a scrolling list can wrap the render in
+`keepScroll(scroller, render)`: rows carry `data-key`, and the row at the top of
+the view stays put while rows are added above it. A remount (new options,
+`refreshOptions`) keeps the scroll position of the card's scrolled elements, and
+a scroller left at its end stays at the end when its content changes height
+(a live reading that wraps onto a second line and back).
